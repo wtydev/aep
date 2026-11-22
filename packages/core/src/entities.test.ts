@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Change } from '@aep/schema';
+import type { Change } from '@wty.dev/aep-schema';
 import { AepError } from './errors.js';
 import {
   applyChanges,

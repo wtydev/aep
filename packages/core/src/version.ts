@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION } from '@aep/schema';
+import { PROTOCOL_VERSION } from '@wty.dev/aep-schema';
 
 export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [PROTOCOL_VERSION];
 

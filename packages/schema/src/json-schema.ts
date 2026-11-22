@@ -20,15 +20,36 @@ export const actionSchemaName = (action: string, part: 'params' | 'result') =>
   `${action.replace(/\./g, '-')}-${part}`;
 
 /**
+ * The status rules `CoreResult` enforces with `superRefine`, which `z.toJSONSchema` cannot express.
+ * Keep in step with `CoreResult` in envelope.ts (core spec §4).
+ */
+const CORE_RESULT_STATUS_RULES = [
+  {
+    if: { properties: { status: { const: 'succeeded' } }, required: ['status'] },
+    then: { required: ['revision', 'output'], not: { required: ['error'] } },
+    else: { required: ['error'], not: { required: ['output'] } },
+  },
+  {
+    if: { properties: { status: { const: 'indeterminate' } }, required: ['status'] },
+    then: {
+      properties: { error: { properties: { next: { const: 'reconcile' } }, required: ['next'] } },
+    },
+  },
+];
+
+/**
  * All published JSON Schemas keyed by file stem. Action schemas match the `schemas/<name>.schema.json`
- * paths declared in the MEP Core manifest.
+ * paths declared in the AEP manifest.
  */
 export function buildJsonSchemas(): Record<string, Record<string, unknown>> {
   const out: Record<string, Record<string, unknown>> = {
     project: toSchema(Project, 'project', 'output'),
     operation: toSchema(Operation, 'operation'),
     'core-request': toSchema(CoreRequest, 'core-request'),
-    'core-result': toSchema(CoreResult, 'core-result', 'output'),
+    'core-result': {
+      ...toSchema(CoreResult, 'core-result', 'output'),
+      allOf: CORE_RESULT_STATUS_RULES,
+    },
     'core-manifest': toSchema(CoreManifest, 'core-manifest'),
     'core-state': toSchema(CoreState, 'core-state', 'output'),
   };

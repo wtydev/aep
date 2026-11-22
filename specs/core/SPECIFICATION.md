@@ -1,6 +1,6 @@
 # AEP Core Specification
 
-Status: AEP v0.1 (draft, normative for implementers). Domain semantics are in `specs/audio/AUDIO-DOMAIN.md`. Bindings are in `specs/core/TRANSPORT.md`. Decisions are in `docs/adr/`.
+Status: AEP 1.0 (normative for implementers). Domain semantics are in `specs/audio/AUDIO-DOMAIN.md`. Bindings are in `specs/core/TRANSPORT.md`. Decisions are in `docs/adr/`.
 
 ## 1. Overview
 
@@ -12,10 +12,11 @@ AEP (Audio Edit Protocol) lets a client read, edit and version an audio project 
 - revisions, receipts and an idempotency ledger,
 - scope limits on what a transaction may change,
 - proposals, history (undo and redo), assets and asynchronous jobs,
-- capability advertisement and version negotiation,
+- capability advertisement, version negotiation and stability rules,
+- durability of host state across restarts,
 - a closed error vocabulary of 27 codes.
 
-AEP is a domain profile of MEP Core 1 (section 3). It is not an implementation of MEP 1 (video).
+AEP 1.0 is a standalone protocol. It defines its own envelope (section 4). It does not depend on any other protocol.
 
 ## 2. Conformance language and terms
 
@@ -32,18 +33,18 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be interpreted a
 | Receipt     | The record of a committed or rejected transaction, proposal or history action.                        |
 | Ledger      | The host's record of request ids per session, used for idempotency.                                   |
 
-## 3. Relationship to MEP Core 1
+## 3. Protocol identity
 
-AEP uses the MEP Core 1 protocol identifier `mep/core/1` and its envelope, manifest and state shapes. The envelope is defined in `docs/adr/0001-mep-core-compatibility.md`.
+The protocol identifier is `aep/1`. It appears in the `protocol` field of every request, result, manifest and state document. It changes only with a new protocol major version (section 16.3).
 
-AEP adds, on top of Core 1:
+AEP 1.0 defines:
 
+- the envelope, manifest and state shapes (section 4),
 - the 20 domain actions (section 7),
 - transactions, revisions and receipts (sections 8 and 9),
 - diffs, entity paths and scope (sections 10 and 11),
-- proposals, history, assets, jobs and capability names (sections 12 to 16).
-
-AEP makes no claim of interoperability with MEP 1 or with any other MEP implementation. The vendored Core schema test (`tests/mep-core-compat.test.ts`) checks AEP fixtures against one upstream Core schema revision and nothing more (`docs/adr/0001-mep-core-compatibility.md`).
+- proposals, history, assets, jobs and capability names (sections 12 to 16),
+- durability of host state (section 17).
 
 `session`, `workspace` and `id` are strings of 1 to 100 characters from `A-Z a-z 0-9 _ -`. The workspace id is the project id.
 
@@ -55,9 +56,9 @@ A request has these fields:
 { protocol, session, workspace, id, credential, action, version, baseRevision?, params }
 ```
 
-- `protocol` is `mep/core/1`.
+- `protocol` is `aep/1`.
 - `credential` is 1 to 512 characters. It MUST NOT be echoed in any result, receipt, diagnostic, manifest, state or log.
-- `version` is an integer of at least 1. AEP v0.1 uses version 1 for every action.
+- `version` is an integer of at least 1. It is the version of the action, not the protocol version. AEP 1.0 uses version 1 for every action.
 - `baseRevision` is required for write actions except those listed in section 7.3.
 - `params` is validated against the action's parameter schema.
 
@@ -71,7 +72,7 @@ A result has these fields:
 - A `succeeded` result MUST carry `revision` and `output`, and MUST NOT carry `error`.
 - Every other status MUST carry `error` and MUST NOT carry `output`.
 - An `indeterminate` result MUST carry `error.next = reconcile`.
-- `error` is `{code, next, message}`. `message` is truncated to 1200 characters.
+- `error` is `{code, next, message}`. `message` is 1 to 1200 Unicode code points. A host truncates a longer message to 1200 code points.
 
 The shapes are published as `schemas/core-request.schema.json`, `schemas/core-result.schema.json`, `schemas/core-manifest.schema.json` and `schemas/core-state.schema.json`.
 
@@ -86,7 +87,7 @@ A host MUST evaluate a request in this order and stop at the first failure:
 1. **Envelope.** Parse the request against the envelope schema. Failure: `bad_request`, with the error describing the first failing path.
 2. **Authenticate.** Identify the session and check the credential, revocation, expiry and workspace. Order: unknown session or credential mismatch: `not_authorized`; revoked: `session_revoked`; expired: `session_expired`; workspace mismatch: `not_authorized`. The host compares the SHA-256 hash of the credential with the stored hash in constant time, and does so even for an unknown session. Credentials are not stored.
 3. **Check action.** In order: unknown action: `unknown_action`; `version` not equal to the action version: `unsupported_version`; capability not advertised: `capability_unsupported`; role or `allowedActions` does not permit the action: `not_authorized`; serialized request size above `maxRequestBytes`: `limit_exceeded`.
-4. **Ledger.** Look up `(session, id)`. See section 6.3. Failures from steps 1 to 3 are not recorded in the ledger.
+4. **Ledger.** Look up `(session, id)`. See section 6.3. Failures from steps 1 to 3 are not recorded in the ledger. A durable host then reserves a write request before step 5 (section 17.2).
 5. **Parameters.** Validate `params` against the action's schema. Failure: `invalid_params`, with the path.
 6. **Base revision.** For write actions not in section 7.3, `baseRevision` MUST be present (`invalid_params` at `/baseRevision` if absent) and MUST equal the current revision, otherwise `conflict`.
 7. **Execute.** Run the action. Its specific checks and their errors are in sections 8 to 16.
@@ -129,7 +130,7 @@ A record is created for every request that passes step 3 of section 5, whatever 
 
 ### 6.4 Reconciliation
 
-A client that receives `outcome_uncertain` or a timeout MUST retry with the same id and the same request body. Under section 6.3 that returns the stored result, or `busy` if the first attempt is still running.
+A client that receives `outcome_uncertain` or a timeout MUST retry with the same id and the same request body. Under section 6.3 that returns the stored result, or `busy` if the first attempt is still running. A durable host that answers `outcome_uncertain` after a restart is described in section 17.3.
 
 ## 7. Actions
 
@@ -141,7 +142,7 @@ A client that receives `outcome_uncertain` or a timeout MUST retry with the same
 | ---------------------- | ------------------------- | ------ | -------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `aep.capabilities`     | `aep.core`                | read   | `{versions?}` (see 16.3)                     | capabilities object                                              | `unsupported_version`                                                                                    |
 | `project.inspect`      | `aep.core`                | read   | none                                         | `{revision, project}`                                            | none                                                                                                     |
-| `project.describe`     | `aep.core`                | read   | none                                         | project summary (counts, duration, tempo, meter)                 | none                                                                                                     |
+| `project.describe`     | `aep.core`                | read   | none                                         | project summary (see below)                                      | none                                                                                                     |
 | `transaction.validate` | `aep.core`                | read   | transaction                                  | `{valid, baseRevision, diagnostics, changes}`                    | see 8.2                                                                                                  |
 | `transaction.commit`   | `aep.core`                | write  | transaction                                  | Receipt                                                          | `validation_failed`, `scope_violation`, `conflict`, `limit_exceeded`, `precondition_failed`, `not_found` |
 | `receipt.get`          | `aep.core`                | read   | `{requestId}`                                | `{requestId, action, status, errorCode?, diagnostics, receipt?}` | `not_found`                                                                                              |
@@ -162,6 +163,8 @@ A client that receives `outcome_uncertain` or a timeout MUST retry with the same
 
 Every action can also fail with the pipeline errors of section 5. `transaction.validate` returns `succeeded` with `valid: false` and a diagnostic list when the transaction fails for any domain reason (operation, invariant, scope or limit). It does not return a rejected result for that case. At most 200 diagnostics are returned.
 
+The `project.describe` output is `{projectId, name, revision, sampleRate?, trackCount, clipCount, noteCount, assetCount, durationSeconds, durationBeats, tempo, meter}`. `durationSeconds` and `durationBeats` give the end of the last clip. `tempo` and `meter` are the project's maps.
+
 ### 7.2 Action identifiers
 
 Action ids match `^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$`.
@@ -174,7 +177,7 @@ Only these write actions do not require `baseRevision`: `proposal.reject`, `asse
 
 ### 8.1 Transaction shape
 
-A transaction contains an ordered list of operations (the 31 operations in `AUDIO-DOMAIN.md` section 6), an optional `scope` (section 11), and optional metadata. A transaction MUST NOT contain more operations than `maxOperationsPerTransaction`; the host checks this before applying any operation and returns `limit_exceeded`.
+A transaction is `{operations, scope?, label?, extensions?}`. `operations` is an ordered list of at least one operation (the 31 operations in `AUDIO-DOMAIN.md` section 6). `scope` is described in section 11. `label` is a string of at most 256 characters for history displays. A transaction MUST NOT contain more operations than `maxOperationsPerTransaction`; the host checks this before applying any operation and returns `limit_exceeded`.
 
 ### 8.2 Validation
 
@@ -190,7 +193,7 @@ A transaction contains an ordered list of operations (the 31 operations in `AUDI
 4. Evaluate the session scope and the transaction scope against the diff (section 11). Failure: `scope_violation`.
 5. Assign the next revision and record a Receipt.
 
-If any step fails, the revision does not change.
+If any step fails, the revision does not change. A durable host persists the commit before it returns the result (section 17.2).
 
 ## 9. Revisions and receipts
 
@@ -252,11 +255,11 @@ A diff is a list of changes, each `{entity, path, kind, before?, after?, fields?
 
 A scope has any subset of:
 
-- `operations`: names the transaction MAY use. Entries are an exact operation name, a `prefix.*` pattern, or `*`.
+- `operations`: names the transaction MAY use. Entries are an exact operation name, a `prefix.*` pattern, or `*`. Each entry matches `^[a-z][a-z0-9.]*(\.\*)?$|^\*$`.
 - `tracks`: track ids. A change is in scope when its path begins with `/tracks/<id>` for a listed id. Changes to `/project`, `/tempo`, `/meter`, `/trackOrder`, `/sections/...` and `/assets/...` are therefore out of scope.
 - `clips`: clip ids. A change is in scope when its path is `/tracks/<trackId>/clips/<id>` or a descendant of it, for a listed id.
-- `timeRange`: `{start, end, unit}` with `unit` one of `beats`, `seconds` or `samples`. Every changed time-bearing entity must lie inside the range, measured in seconds, both before and after the change. The range is converted to seconds with the tempo (and sample rate) of the state on each side. A `samples` range on a project without `sampleRate` is a violation.
-- `properties`: field names for updates and collection names for add and remove.
+- `timeRange`: `{start, end, unit}` with `unit` one of `beats`, `seconds` or `samples`, `start` and `end` at least 0, and `end` greater than `start`. Every changed time-bearing entity must lie inside the range, measured in seconds, both before and after the change. The range is converted to seconds with the tempo (and sample rate) of the state on each side. A `samples` range on a project without `sampleRate` is a violation.
+- `properties`: field names for updates and collection names for add and remove. Each entry is 1 to 64 characters.
 
 Each of `tracks`, `clips`, `operations` and `properties`, when present, MUST be non-empty.
 
@@ -303,7 +306,7 @@ Assets are the host's logical media. The host stores descriptors and bytes; the 
   1. unknown root: `path_rejected`,
   2. path empty, containing NUL or a backslash, absolute, with a drive letter, with an empty, `.` or `..` segment, escaping the root, or with a root that does not exist: `path_rejected`,
   3. media type (from `mediaType`, else the file extension) not in the importable set `audio/wav`, `audio/flac`, `audio/mpeg`, `audio/ogg`, `audio/aiff`, `audio/midi`: `invalid_params`,
-  4. not a regular file: `path_rejected`; file does not exist: `asset_not_found`,
+  4. file does not exist: `asset_not_found`; final component is a symbolic link, not a regular file, or changed while being imported: `path_rejected`,
   5. size above the host's `maxAssetBytes` (default 64 MiB): `limit_exceeded`,
   6. explicit `assetId` already in the store: `precondition_failed`.
 - Messages replace the root's filesystem path with `<root>`.
@@ -325,7 +328,7 @@ Jobs run renders and generations asynchronously. A job does not change project s
 - The reference executors (`packages/host/src/engine/fixture-executors.ts`) are test doubles. They produce a manifest and a deterministic pattern. They are not render engines and not composition models.
 - A job result carries `assets`, optional `operations` that a client may submit, and an optional `reproducibility` record.
 
-## 16. Capabilities and version negotiation
+## 16. Capabilities and versioning
 
 ### 16.1 Capability names
 
@@ -335,17 +338,103 @@ Each operation requires one capability (`AUDIO-DOMAIN.md` section 6). Each actio
 
 ### 16.2 Advertisement
 
-`aep.capabilities` returns the advertised capabilities, the action version and the host's limits. It also reports the negotiated `protocolVersion`, the `operations` the host accepts (filtered by the advertised capabilities), and options for `aep.render` (available renderers) and for import (`roots`, `maxBytes`). The reference host always reports `deviceTypes: []`.
+`aep.capabilities` returns the advertised capabilities, the action version and the host's limits. It also reports the negotiated `protocolVersion`, the `operations` the host accepts (filtered by the advertised capabilities), and options for `aep.render` (available renderers) and for import (`roots`, `maxBytes`). It reports the host's durability as `host.durability` (section 17.1). The reference host always reports `deviceTypes: []`.
 
 The advertised set is the host's configured capabilities when given, otherwise a default set. The default set is every capability named in sections 7.1 and `AUDIO-DOMAIN.md` section 6, except: `aep.render` when no render executor is configured, `aep.generation` when no generation executor is configured, `aep.jobs` when no executor of either kind is configured, and `aep.audio.assets.import` when no import root is configured. `aep.core` is always advertised.
 
-### 16.3 Version
+### 16.3 Versions and negotiation
 
-Each action has a version. AEP v0.1 defines version 1 for every action. A request with any other version is `unsupported_version`. A host that supports several versions of an action MUST advertise each of them in the manifest.
+Each action has a version. AEP 1.0 defines version 1 for every action. A request with any other version is `unsupported_version`. A host that supports several versions of an action MUST advertise each of them in the manifest.
 
-Protocol versions have the form `MAJOR.MINOR`; the reference host supports `0.1`. Two versions are compatible when their majors are equal and, for major 0, their minors are equal. `aep.capabilities` accepts an optional `params.versions` (array of strings) listing the versions the client supports. The host selects the highest compatible version, reports it as `protocolVersion`, and returns `unsupported_version` when there is none. Without `versions`, the host reports its own current version.
+The protocol version has the form `MAJOR.MINOR`. This specification is protocol version 1.0. Two protocol versions are compatible when their majors are equal. While the major is 0, they are compatible only when their minors are equal as well.
 
-## 17. Limits
+`aep.capabilities` accepts an optional `params.versions`: an array of 1 to 16 strings, each matching `^\d+\.\d+$`, listing the protocol versions the client supports. Negotiation works as follows:
+
+1. For every pair of a client version and a host version that are compatible, the lower version of the pair is a candidate.
+2. The negotiated version is the highest candidate. The host reports it as `protocolVersion`, and both sides converse at that version.
+3. If there is no compatible pair, the host returns `unsupported_version`.
+
+Without `versions`, the host reports its own current version.
+
+Schema versions are separate. The published schemas have version 1.0.0 and follow semantic versioning. The `$id` of each published schema includes its schema version.
+
+### 16.4 Stability within 1.x
+
+Within a major version, protocol changes are additions only:
+
+- new optional fields,
+- new actions,
+- new operations,
+- new error codes,
+- new capabilities.
+
+A client MUST ignore capabilities it does not recognize. A client MUST treat an error code it does not recognize by its `next` value (section 19).
+
+Removals, renames and semantic changes require a new protocol major version. The `protocol` identifier changes at the same time (section 3).
+
+## 17. Durability
+
+### 17.1 Declaration
+
+A host reports its durability in `aep.capabilities` as `host.durability`. The value is `durable` or `volatile`.
+
+### 17.2 Durable hosts
+
+A host that reports `durable` MUST persist all of the following before it returns the result of a write request:
+
+- the accepted project and its revision,
+- the request ledger: the fingerprint and result of each record within `receiptRetention`,
+- receipts and diagnostics, including the history entries and the undo and redo targets,
+- proposals, with their proposed state,
+- asset descriptors and asset bytes,
+- job records.
+
+A durable host MUST also persist sessions as credential hashes only, and MUST NOT persist a credential. The protocol has no action that creates a session (section 6.2), so it does not define when a new or revoked session becomes durable. A host MUST document that point.
+
+A durable host MUST make the reservation of a write request durable before it performs any effect of that request. The reservation is the ledger record of section 6.3 for a request that is pending. Read actions are not reserved.
+
+A durable host MUST NOT start a job (`render.request`, `generation.request`) until the request that created it is persisted, so a job never produces assets for a request that the host then reports as failed.
+
+A durable host MUST NOT return `succeeded` for a write request unless the request's result and effects are persisted. If persistence fails, the host returns one of these results:
+
+- `internal_error`, when no effect of the request remains. This covers a failed reservation, and a failed final write after the host has undone a reversible effect.
+- `outcome_uncertain`, when an effect of the request may remain. The host MUST record that result in the ledger.
+
+### 17.3 Recovery
+
+After a restart, a durable host MUST handle each reserved request that has no stored result as follows:
+
+- It MUST answer the request with `outcome_uncertain`: status `indeterminate`, `error.next = reconcile`.
+- It MUST NOT execute the request again.
+- It MUST record that result in the ledger, so that a retry with the same id and body returns the same result (section 6.3).
+
+A client reconciles by reading project state and history (`project.inspect`, `history.list`), not by resending the request.
+
+After a restart, a durable host MUST move each non-terminal job (`queued` or `running`) to `failed`. The reference host uses error code `internal_error` and the message `interrupted by host restart`.
+
+### 17.4 Volatile hosts
+
+A volatile host MUST report `volatile`. On restart it loses everything listed in section 17.2, including the ledger. A client MUST NOT assume that a retry with the same id is deduplicated across a restart of a volatile host.
+
+### 17.5 Reference host
+
+This section is not normative. The reference host is opened with `await AepHost.open({ dataDir, ... })`. With `dataDir` it reports `durable`. A host built with the constructor alone is volatile, and the constructor throws if `dataDir` is set.
+
+- The host runs requests one at a time.
+- State is one file, `<dataDir>/host-state.json` (`formatVersion` 1, mode 0600). Each write goes to a temporary file, which is synced, renamed over the old file, and followed by a sync of the directory. `dataDir` has mode 0700.
+- `AepHost.open` refuses a `dataDir` or `assets/` directory that is a symlink, is owned by another user, or is writable by group or others, and a state file that is not a regular file owned by the host user. State and blobs are read without following symlinks.
+- Asset bytes are files named `<dataDir>/assets/<sha256 hex>` (mode 0600). They are written before the state file that refers to them. The host never deletes them. A blob already on disk is reused only after its bytes hash to its name; otherwise it is rewritten.
+- The state file holds the project, sessions, ledger, reservations, receipts, history, proposals, asset descriptors and jobs. A session is stored as the SHA-256 hash of its credential.
+- Before the effect of a write request, the host writes the reservation. A failed write makes the request return `internal_error`, and a retry with the same id runs as a new request.
+- After the effect, the host writes the result. If that write fails and the effect can be undone and nothing was committed, the host undoes it and returns `internal_error`. If the commit already happened, or the effect cannot be undone (`job.cancel`), the host keeps the effect and returns `outcome_uncertain`, which it stores in the ledger. The next successful write stores the full state again. If the failed write may have reached disk, the host immediately writes the state again with the `outcome_uncertain` result, so a crash cannot replay a success that was never reported; if that write fails too, the host answers every later request with `internal_error` until it is restarted.
+- A rejected or failed request is undone the same way when its final write fails, so memory never holds state that is not on disk.
+- Jobs start after the final write of the request that created them.
+- On open, each reservation without a result becomes an `outcome_uncertain` result in the ledger, and each `queued` or `running` job becomes `failed`. The host writes the state again if recovery changed anything.
+- Session creation and revocation are written in the background. They are durable only after `await host.flush()`.
+- The host does not lock `dataDir`. Only one process may use a directory at a time.
+- Every write request rewrites the whole state file twice (reservation, then result). The cost grows with the project size and with the ledger (`receiptRetention` results per session, including read results such as `project.inspect`). The reference host favours simplicity over write throughput; large deployments should lower `receiptRetention` or use a host with incremental storage.
+
+## 18. Limits
 
 | Limit                         | Default (reference) | Enforced                                                    |
 | ----------------------------- | ------------------- | ----------------------------------------------------------- |
@@ -365,9 +454,9 @@ Notes:
 
 Limits are advertised in `aep.capabilities`. A host MUST NOT accept a request that exceeds a limit, and MUST return `limit_exceeded` for it.
 
-## 18. Error codes
+## 19. Error codes
 
-The 27 codes, with the `next` and `status` each code carries (`packages/schema/src/errors.ts`). Every code's `next` is a member of the Core enum `none`, `fix`, `reread`, `ask_user`, `reconcile`.
+The 27 codes, with the `next` and `status` each code carries (`packages/schema/src/errors.ts`). Every code's `next` is a member of the enum `none`, `fix`, `reread`, `ask_user`, `reconcile`.
 
 | Code                     | next      | status        | Meaning                                                                      |
 | ------------------------ | --------- | ------------- | ---------------------------------------------------------------------------- |
@@ -401,25 +490,24 @@ The 27 codes, with the `next` and `status` each code carries (`packages/schema/s
 
 The error `message` is a human-readable string. Clients MUST branch on `code` and `next`, not on `message`.
 
-## 19. Extensions
+## 20. Extensions
 
 Entities that carry an `extensions` object accept keys that match `^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$` with any JSON value. Other properties of those entities are closed.
 
-Extension keys SHOULD be reverse-DNS names owned by the publisher (for example `com.example.reverb`). The `aep.` prefix is reserved for AEP. The reserved prefix is a convention in v0.1 and is not enforced by the schema (see `docs/adr/0005-extension-architecture.md`).
+Extension keys SHOULD be reverse-DNS names owned by the publisher (for example `com.example.reverb`). The `aep.` prefix is reserved for AEP. The reserved prefix is a convention in AEP 1.0 and is not enforced by the schema (see `docs/adr/0005-extension-architecture.md`).
 
 A host MUST preserve extension values on round trip, and MUST NOT interpret them. A host MUST NOT include extension values in diagnostics beyond their paths.
 
-## 20. Conformance
+## 21. Conformance
 
-A conforming host implements sections 4 to 18 and the operations in `AUDIO-DOMAIN.md` without extension. A conforming host MUST:
+A conforming host implements sections 4 to 16, 18 and 19, and the operations in `AUDIO-DOMAIN.md`. A host that reports `host.durability` as `durable` also implements section 17. A conforming host MUST:
 
-- pass the envelope and vocabulary checks in `tests/mep-core-compat.test.ts`,
-- pass the AEP conformance suite, reached through the `conformance` script in the root `package.json`,
+- pass the envelope checks in `tests/envelope.test.ts`,
+- pass the AEP conformance suite at the levels required by `specs/core/CONFORMANCE.md`, reached through the `conformance` script in the root `package.json`,
 - publish schemas matching `schemas/`.
 
 The conformance script runs the reference host at `examples/minimal-host`. Its outputs are not themselves normative.
 
-## 21. Open items
+## 22. Open items
 
-1. The reference ledger, receipt log, history and job manager are in memory and are lost on restart. MEP Core 1 expects a reservation to be durable before an effect; AEP v0.1 does not claim that durability and does not yet define what a durable host MUST persist.
-2. The unit of `loop.length` is not defined by the schema.
+None for 1.0.

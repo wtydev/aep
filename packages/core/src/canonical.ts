@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { CoreRequest } from '@aep/schema';
+import type { CoreRequest } from '@wty.dev/aep-schema';
 
 function serialize(value: unknown): string {
   if (value === null) return 'null';

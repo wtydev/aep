@@ -1,10 +1,10 @@
 # AEP Transport Specification
 
-Status: AEP v0.1 (draft, normative for implementers). Envelope and actions are in `specs/core/SPECIFICATION.md`.
+Status: AEP 1.0 (normative for implementers). Envelope and actions are in `specs/core/SPECIFICATION.md`.
 
 ## 1. Transport independence
 
-A transport carries MEP Core 1 requests and results between a client and a host. A transport MUST NOT change any field of a request or result, MUST NOT add fields to them, and MUST NOT interpret `params`, `output` or `error` beyond framing.
+A transport carries AEP requests and results between a client and a host. A transport MUST NOT change any field of a request or result, MUST NOT add fields to them, and MUST NOT interpret `params`, `output` or `error` beyond framing.
 
 A host's behaviour MUST NOT depend on the transport. The same request sent through any binding MUST yield the same result, subject to transport-specific framing limits in sections 2 to 4.
 
@@ -18,13 +18,13 @@ The directory binding exchanges files in one directory shared by a client and a 
 
 ```
 <dir>/
-  mep.json           manifest (CoreManifest)
+  aep.json           manifest (CoreManifest)
   state.json         state (CoreState)
   requests/          client-written requests
   results/           host-written results
 ```
 
-`mep.json` and `state.json` are written by the host. `mep.json` is written when the host starts. `state.json` is written when the host starts and again after every processed request. A client reads both files.
+`aep.json` and `state.json` are written by the host. `aep.json` is written when the host starts. `state.json` is written when the host starts and again after every processed request. A client reads both files.
 
 ### 2.2 Request flow
 
@@ -60,7 +60,7 @@ A retry uses the same file name as the original. If the host has not yet removed
 ### 2.6 Security notes
 
 - A request file holds the session credential in plaintext until the host removes it. An implementation SHOULD remove the request file as soon as it has been read, and MUST NOT leave request files in a location that other users can read.
-- A result file does not contain the credential. A host MUST NOT place the credential in `mep.json`, `state.json` or any result.
+- A result file does not contain the credential. A host MUST NOT place the credential in `aep.json`, `state.json` or any result.
 - The directory is a local trust boundary. Any process that can write to `requests/` as the same user can submit requests. The binding provides no protection against that process.
 - A host MUST NOT expose host filesystem paths through the directory. Asset descriptors carry no paths (`SPECIFICATION.md` section 14).
 
@@ -129,4 +129,4 @@ The in-memory binding calls a request handler in the same process.
 | Stdio     | Clients that spawn a host as a child process           | Child process, same user | 4 MiB per line         |
 | In-memory | Tests and embedding                                    | None                     | Host `maxRequestBytes` |
 
-A host advertising several bindings MUST enforce the same authentication, ledger and validation rules in each. A binding-specific limit MAY reject a request that the host would otherwise accept. The binding then returns `bad_request` for the framing limit and the host is not involved. The 4 MiB caps are fixed and are not derived from the host's `maxRequestBytes` (`SPECIFICATION.md` section 17), so the two can disagree.
+A host advertising several bindings MUST enforce the same authentication, ledger and validation rules in each. A binding-specific limit MAY reject a request that the host would otherwise accept. The binding then returns `bad_request` for the framing limit and the host is not involved. The 4 MiB caps are fixed and are not derived from the host's `maxRequestBytes` (`SPECIFICATION.md` section 18), so the two can disagree.

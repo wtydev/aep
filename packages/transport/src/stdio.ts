@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess, SpawnOptionsWithoutStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
-import { CoreManifest, CoreResult, CoreState, sanitizeRequestId } from '@aep/schema';
-import type { CoreRequest } from '@aep/schema';
+import { CoreManifest, CoreResult, CoreState, sanitizeRequestId } from '@wty.dev/aep-schema';
+import type { CoreRequest } from '@wty.dev/aep-schema';
 import { badRequestResult, internalErrorResult } from './results.js';
 import type { ClientTransport, RequestHandler } from './types.js';
 

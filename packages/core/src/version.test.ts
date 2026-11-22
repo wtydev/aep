@@ -40,7 +40,7 @@ describe('negotiateVersion', () => {
   });
 
   it('supports the declared protocol versions', () => {
-    expect(SUPPORTED_PROTOCOL_VERSIONS).toEqual(['0.1']);
-    expect(negotiateVersion(SUPPORTED_PROTOCOL_VERSIONS, ['0.1'])).toBe('0.1');
+    expect(SUPPORTED_PROTOCOL_VERSIONS).toEqual(['1.0']);
+    expect(negotiateVersion(SUPPORTED_PROTOCOL_VERSIONS, ['1.0'])).toBe('1.0');
   });
 });

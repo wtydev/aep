@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Operation } from '@aep/schema';
+import { Operation } from '@wty.dev/aep-schema';
 import { applyOperation } from './apply.js';
 import { createdRemoved, projectDiff } from './diff.js';
 import { demoContext, demoProject } from './fixtures.js';

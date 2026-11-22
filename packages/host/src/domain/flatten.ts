@@ -1,4 +1,4 @@
-import { Project } from '@aep/schema';
+import { Project } from '@wty.dev/aep-schema';
 import type {
   Asset,
   AutomationLane,
@@ -12,9 +12,9 @@ import type {
   Section,
   TempoPoint,
   Track,
-} from '@aep/schema';
-import { AepError } from '@aep/core';
-import type { EntityMap, EntityRecord } from '@aep/core';
+} from '@wty.dev/aep-schema';
+import { AepError } from '@wty.dev/aep-core';
+import type { EntityMap, EntityRecord } from '@wty.dev/aep-core';
 
 const clipCompare = (a: { start: number; id: string }, b: { start: number; id: string }): number =>
   a.start - b.start || a.id.localeCompare(b.id);

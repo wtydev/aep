@@ -4,11 +4,12 @@ Each record states one decision, why it was made, and what it costs. Records are
 
 | ADR                                        | Title                      | Status               |
 | ------------------------------------------ | -------------------------- | -------------------- |
-| [0001](0001-mep-core-compatibility.md)     | MEP Core 1 compatibility   | Accepted, 2026-11-22 |
+| [0001](0001-mep-core-compatibility.md)     | MEP Core 1 compatibility   | Superseded by 0006   |
 | [0002](0002-canonical-model.md)            | Canonical model            | Accepted, 2026-11-22 |
 | [0003](0003-transport.md)                  | Transport                  | Accepted, 2026-11-22 |
 | [0004](0004-transactions-and-revisions.md) | Transactions and revisions | Accepted, 2026-11-22 |
 | [0005](0005-extension-architecture.md)     | Extension architecture     | Accepted, 2026-11-22 |
+| [0006](0006-aep-envelope.md)               | AEP envelope               | Accepted, 2026-11-22 |
 
 Normative text lives in `specs/`:
 

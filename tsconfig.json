@@ -6,7 +6,7 @@
     "declaration": false,
     "declarationMap": false,
     "rootDir": ".",
-    "paths": { "@aep/*": ["./packages/*/src/index.ts"] }
+    "paths": { "@wty.dev/aep-*": ["./packages/*/src/index.ts"] }
   },
   "include": [
     "packages/*/src/**/*.ts",

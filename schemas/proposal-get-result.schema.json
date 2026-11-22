@@ -2156,11 +2156,20 @@
                           "type": "number",
                           "minimum": 1,
                           "maximum": 999
+                        },
+                        "curve": {
+                          "default": "step",
+                          "type": "string",
+                          "enum": [
+                            "step",
+                            "linear"
+                          ]
                         }
                       },
                       "required": [
                         "beat",
-                        "bpm"
+                        "bpm",
+                        "curve"
                       ],
                       "additionalProperties": false
                     }
@@ -3095,7 +3104,8 @@
           "default": [
             {
               "beat": 0,
-              "bpm": 120
+              "bpm": 120,
+              "curve": "step"
             }
           ],
           "minItems": 1,
@@ -3111,11 +3121,20 @@
                 "type": "number",
                 "minimum": 1,
                 "maximum": 999
+              },
+              "curve": {
+                "default": "step",
+                "type": "string",
+                "enum": [
+                  "step",
+                  "linear"
+                ]
               }
             },
             "required": [
               "beat",
-              "bpm"
+              "bpm",
+              "curve"
             ],
             "additionalProperties": false
           }
@@ -4201,5 +4220,5 @@
     "proposal"
   ],
   "additionalProperties": false,
-  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/proposal-get-result.schema.json"
+  "$id": "https://github.com/wtydev/aep/schemas/1.0.0/proposal-get-result.schema.json"
 }

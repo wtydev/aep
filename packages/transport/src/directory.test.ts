@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from 'node:fs/prom
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CORE_PROTOCOL, CoreState } from '@aep/schema';
-import type { CoreRequest } from '@aep/schema';
+import { CORE_PROTOCOL, CoreState } from '@wty.dev/aep-schema';
+import type { CoreRequest } from '@wty.dev/aep-schema';
 import { DirectoryClientTransport, DirectoryHostBinding } from './directory.js';
 import { FakeHandler } from './test-handler.js';
 
@@ -93,12 +93,12 @@ describe('directory binding', () => {
     }
   });
 
-  it('publishes mep.json and state.json (mode 0600) and serves them to the client', async () => {
+  it('publishes aep.json and state.json (mode 0600) and serves them to the client', async () => {
     const dir = await tmpDir();
     const host = new DirectoryHostBinding({ dir, handler: new FakeHandler(), pollMs: 10 });
     await host.start();
     try {
-      expect((await stat(join(dir, 'mep.json'))).mode & 0o777).toBe(0o600);
+      expect((await stat(join(dir, 'aep.json'))).mode & 0o777).toBe(0o600);
       expect((await stat(join(dir, 'state.json'))).mode & 0o777).toBe(0o600);
       const client = new DirectoryClientTransport({ dir });
       const manifest = await client.manifest();

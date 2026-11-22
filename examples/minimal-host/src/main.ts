@@ -2,18 +2,23 @@
 /**
  * aep-reference-host — the AEP reference host as a stand-alone process.
  *
- * Serves one AEP project through the MEP Core 1 stdio or directory binding. Credentials are
+ * Serves one AEP project through the AEP stdio or directory binding. Credentials are
  * generated here and written to files (mode 0600); they are never printed and never passed on
  * the command line. Diagnostics go to stderr because stdout is the stdio channel.
+ *
+ * With --data-dir the host is durable (SPECIFICATION.md section 17): project, ledger, receipts,
+ * history, proposals, assets, jobs and sessions are persisted there and restored on the next start.
+ * Sessions are created on the first start only; later starts reuse the credential files, which are
+ * left untouched.
  */
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { AepHost, demoProject, referenceExecutors } from '@aep/host';
-import { Project, ROLE_ACTIONS, Scope } from '@aep/schema';
-import { DirectoryHostBinding, serveStdio } from '@aep/transport';
-import type { RequestHandler } from '@aep/transport';
+import { AepHost, demoProject, referenceExecutors } from '@wty.dev/aep-host';
+import { Project, ROLE_ACTIONS, Scope } from '@wty.dev/aep-schema';
+import { DirectoryHostBinding, serveStdio } from '@wty.dev/aep-transport';
+import type { RequestHandler } from '@wty.dev/aep-transport';
 
 const USAGE = `Usage: aep-reference-host [options]
 
@@ -26,6 +31,9 @@ const USAGE = `Usage: aep-reference-host [options]
   --credential-out <file>       without --session-config: one 'edit' session, credential written here
   --import-root <name=path>     directory asset.import may read from (repeatable)
   --executors reference         enable the reference render/generation executors
+  --data-dir <dir>              durable host: persist all state in <dir> and restore it on the next
+                                start (--fixture only seeds an empty <dir>; sessions are created on
+                                the first start and reused, with unchanged credential files, after)
   --poll-ms <n>                 directory binding poll interval (default 25)
   --verbose                     log start-up information to stderr
   --help                        this text
@@ -110,6 +118,7 @@ async function main(): Promise<void> {
       'credential-out': { type: 'string' },
       'import-root': { type: 'string', multiple: true },
       executors: { type: 'string' },
+      'data-dir': { type: 'string' },
       'poll-ms': { type: 'string' },
       verbose: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
@@ -165,20 +174,72 @@ async function main(): Promise<void> {
     ? Project.parse(JSON.parse(await readFile(values.fixture, 'utf8')))
     : demoProject();
 
-  const host = new AepHost({
+  const hostOptions = {
     project,
-    hostInfo: { name: 'aep-reference-host', version: '0.1.0' },
+    hostInfo: { name: 'aep-reference-host', version: '1.0.0' },
     ...(Object.keys(importRoots).length > 0 ? { importRoots } : {}),
     ...(values.executors === 'reference' ? { executors: referenceExecutors() } : {}),
-    onInternalError: (e, req) => {
+    onInternalError: (e: unknown, req: { action: string; id: string }): void => {
       process.stderr.write(
         `aep-reference-host: internal error in ${req.action} (${req.id}): ${e instanceof Error ? (e.stack ?? e.message) : String(e)}\n`,
       );
     },
-  });
+  };
+  const dataDir = values['data-dir'] === undefined ? undefined : resolve(values['data-dir']);
+  const host =
+    dataDir === undefined
+      ? new AepHost(hostOptions)
+      : await AepHost.open({ ...hostOptions, dataDir });
+  if (dataDir !== undefined) log(`durable host, data directory ${dataDir}`);
+
+  const exists = (path: string): Promise<boolean> =>
+    access(path).then(
+      () => true,
+      () => false,
+    );
+  /** What a session grants; a change in the config means a new session. */
+  const grantOf = (config: SessionConfig): string =>
+    JSON.stringify([
+      config.client,
+      config.role,
+      config.scope ?? null,
+      config.allowedActions ?? null,
+      config.expiresAt ?? null,
+    ]);
+  /**
+   * The session this config was granted on an earlier start, if the host still has it and it
+   * grants exactly what the config asks for now. A session whose grant changed is revoked.
+   */
+  const existingSession = async (config: SessionConfig): Promise<string | undefined> => {
+    if (dataDir === undefined) return undefined;
+    const descriptor = `${config.credentialFile}.session.json`;
+    if (!(await exists(config.credentialFile)) || !(await exists(descriptor))) return undefined;
+    let session: unknown;
+    let grant: unknown;
+    try {
+      ({ session, grant } = JSON.parse(await readFile(descriptor, 'utf8')) as Record<
+        string,
+        unknown
+      >);
+      if (typeof session !== 'string') return undefined;
+      host.manifest(session); // throws for a session the host does not know
+    } catch {
+      return undefined;
+    }
+    if (grant === grantOf(config)) return session;
+    host.revokeSession(session);
+    log(`session ${session} (${config.client}) revoked: its configuration changed`);
+    return undefined;
+  };
 
   const sessions: { id: string; config: SessionConfig }[] = [];
   for (const config of configs) {
+    const reused = await existingSession(config);
+    if (reused !== undefined) {
+      sessions.push({ id: reused, config });
+      log(`session ${reused} (${config.client}) restored from the data directory`);
+      continue;
+    }
     const grant = host.createSession({
       client: config.client,
       role: config.role,
@@ -186,11 +247,13 @@ async function main(): Promise<void> {
       ...(config.allowedActions ? { allowedActions: config.allowedActions } : {}),
       ...(config.expiresAt !== undefined ? { expiresAt: config.expiresAt } : {}),
     });
+    // A durable host persists the session before the client can learn its credential.
+    if (dataDir !== undefined) await host.flush();
     await writeSecret(config.credentialFile, `${grant.credential}\n`);
     // The descriptor is written last: its presence means the credential file is complete.
     await writeSecret(
       `${config.credentialFile}.session.json`,
-      `${JSON.stringify({ session: grant.session, workspace: grant.workspace })}\n`,
+      `${JSON.stringify({ session: grant.session, workspace: grant.workspace, grant: grantOf(config) })}\n`,
     );
     sessions.push({ id: grant.session, config });
     log(
@@ -213,6 +276,7 @@ async function main(): Promise<void> {
       output: process.stdout,
     });
     await host.waitForJobs();
+    if (dataDir !== undefined) await host.flush();
     return;
   }
 
@@ -264,6 +328,7 @@ async function main(): Promise<void> {
   clearInterval(keepAlive);
   await Promise.all([...bindings.values()].map((b) => b.stop()));
   await host.waitForJobs();
+  if (dataDir !== undefined) await host.flush();
 }
 
 main().catch((e: unknown) => {

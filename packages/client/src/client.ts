@@ -1,5 +1,10 @@
-import { AepError, generateId } from '@aep/core';
-import { ACTIONS, ACTION_VERSION, CORE_PROTOCOL, NO_BASE_REVISION_ACTIONS } from '@aep/schema';
+import { AepError, generateId } from '@wty.dev/aep-core';
+import {
+  ACTIONS,
+  ACTION_VERSION,
+  CORE_PROTOCOL,
+  NO_BASE_REVISION_ACTIONS,
+} from '@wty.dev/aep-schema';
 import type {
   ActionName,
   ActionOutput,
@@ -10,8 +15,8 @@ import type {
   Job,
   NextStep,
   Transaction,
-} from '@aep/schema';
-import type { ClientTransport } from '@aep/transport';
+} from '@wty.dev/aep-schema';
+import type { ClientTransport } from '@wty.dev/aep-transport';
 
 const newRequestId = (): string => generateId('req');
 

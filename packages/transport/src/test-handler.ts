@@ -1,5 +1,5 @@
-import { CORE_PROTOCOL, CoreRequest, sanitizeRequestId } from '@aep/schema';
-import type { CoreManifest, CoreResult, CoreState } from '@aep/schema';
+import { CORE_PROTOCOL, CoreRequest, sanitizeRequestId } from '@wty.dev/aep-schema';
+import type { CoreManifest, CoreResult, CoreState } from '@wty.dev/aep-schema';
 import { badRequestResult } from './results.js';
 import type { RequestHandler } from './types.js';
 

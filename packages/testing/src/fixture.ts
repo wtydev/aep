@@ -2,7 +2,7 @@
  * The project every conformance test starts from, and the files seeded into the `inbox` import
  * root. Hosts under test receive both through the launcher contract.
  */
-import { Project } from '@aep/schema';
+import { Project } from '@wty.dev/aep-schema';
 
 /** Ids of the entities in {@link CONFORMANCE_FIXTURE}. */
 export const IDS = {
@@ -88,8 +88,8 @@ export const CONFORMANCE_FIXTURE: Project = Project.parse({
       name: 'take.wav',
       mediaType: 'audio/wav',
       contentHash: `sha256:${'0'.repeat(64)}`,
-      byteLength: 384_000,
-      durationSeconds: 4,
+      byteLength: 1_920_000,
+      durationSeconds: 10,
       sampleRate: 48_000,
       channels: 2,
       availability: 'available',

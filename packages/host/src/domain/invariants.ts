@@ -1,4 +1,5 @@
-import type { Diagnostic, Id, Limits, MeterPoint, Project, TempoPoint } from '@aep/schema';
+import type { Diagnostic, Id, Limits, MeterPoint, Project, TempoPoint } from '@wty.dev/aep-schema';
+import { toSeconds } from '@wty.dev/aep-schema';
 import { hasRoutingCycle, trackAcceptsClip } from './apply.js';
 
 /**
@@ -184,6 +185,92 @@ export function validateInvariants(project: Project, limits: Limits): Diagnostic
 
   if (project.tracks.length > limits.maxTracks) {
     d(`project has ${project.tracks.length} tracks, above maxTracks (${limits.maxTracks})`);
+  }
+
+  // 11. Every device-target automation lane refers to the instrument or an effect on the
+  // same track.
+  for (const t of project.tracks) {
+    const deviceIds = new Set<Id>(t.effects.map((e) => e.id));
+    if (t.instrument) deviceIds.add(t.instrument.id);
+    for (const l of t.automation) {
+      if (l.target.kind === 'device' && !deviceIds.has(l.target.deviceId)) {
+        d(
+          `automation lane '${l.id}' targets device '${l.target.deviceId}' which is not on track '${t.id}'`,
+          `/tracks/${t.id}/automation/${l.id}`,
+        );
+      }
+    }
+  }
+
+  // 12. Automation lane points are strictly increasing by time (sorted, unique).
+  for (const t of project.tracks) {
+    for (const l of t.automation) {
+      for (let i = 1; i < l.points.length; i++) {
+        const prev = l.points[i - 1]!.time;
+        const cur = l.points[i]!.time;
+        if (cur === prev) {
+          d(
+            `automation lane '${l.id}' has a duplicate point time ${cur}`,
+            `/tracks/${t.id}/automation/${l.id}`,
+          );
+        } else if (cur < prev) {
+          d(
+            `automation lane '${l.id}' points are not sorted by time`,
+            `/tracks/${t.id}/automation/${l.id}`,
+          );
+        }
+      }
+    }
+  }
+
+  // 13. No duplicate send targets within one track.
+  for (const t of project.tracks) {
+    const seen = new Set<Id>();
+    for (const s of t.sends) {
+      if (seen.has(s.targetTrackId)) {
+        d(`track '${t.id}' has duplicate send target '${s.targetTrackId}'`, `/tracks/${t.id}`);
+      }
+      seen.add(s.targetTrackId);
+    }
+  }
+
+  // 14. An audio clip's asset has an 'audio/*' mediaType other than 'audio/midi'.
+  // 15. An audio clip stays within the source bounds of its asset's durationSeconds
+  // (when the asset declares one).
+  const assetsById = new Map(project.assets.map((a) => [a.id, a] as const));
+  for (const t of project.tracks) {
+    for (const c of t.clips) {
+      if (c.type !== 'audio') continue;
+      const asset = assetsById.get(c.assetId);
+      if (!asset) continue; // missing asset already reported above
+      const path = `/tracks/${t.id}/clips/${c.id}`;
+      if (!asset.mediaType.startsWith('audio/') || asset.mediaType === 'audio/midi') {
+        d(
+          `clip '${c.id}' references asset '${asset.id}' with mediaType '${asset.mediaType}', expected 'audio/*'`,
+          path,
+        );
+      }
+      if (asset.durationSeconds === undefined) continue;
+      let required: number | undefined;
+      if (c.loop?.enabled === true) {
+        required = c.sourceOffset + c.loop.length;
+      } else {
+        try {
+          const len =
+            toSeconds(c.start + c.duration, c.timebase, project.tempo) -
+            toSeconds(c.start, c.timebase, project.tempo);
+          required = c.sourceOffset + len * c.playbackRate;
+        } catch {
+          // A malformed tempo map is already reported; bounds can't be computed.
+        }
+      }
+      if (required !== undefined && required > asset.durationSeconds + 1e-9) {
+        d(
+          `clip '${c.id}' reads source up to ${required}s, beyond asset '${asset.id}' durationSeconds ${asset.durationSeconds}`,
+          path,
+        );
+      }
+    }
   }
 
   return diagnostics;

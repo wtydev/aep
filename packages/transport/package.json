@@ -1,6 +1,7 @@
 {
-  "name": "@aep/transport",
-  "version": "0.1.0",
+  "name": "@wty.dev/aep-transport",
+  "version": "1.0.0",
+  "description": "AEP transport bindings: in-memory, NDJSON stdio and directory bindings",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,11 +23,29 @@
     "url": "https://github.com/wtydev/aep",
     "directory": "packages/transport"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": [
+    "aep",
+    "audio",
+    "protocol",
+    "transport",
+    "ipc"
+  ],
+  "homepage": "https://github.com/wtydev/aep#readme",
+  "bugs": {
+    "url": "https://github.com/wtydev/aep/issues"
+  },
   "scripts": {
     "build": "tsc -b"
   },
   "dependencies": {
-    "@aep/schema": "workspace:*",
-    "@aep/core": "workspace:*"
+    "@wty.dev/aep-schema": "workspace:*",
+    "@wty.dev/aep-core": "workspace:*"
   }
 }

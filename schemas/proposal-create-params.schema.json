@@ -1982,6 +1982,14 @@
                           "type": "number",
                           "minimum": 1,
                           "maximum": 999
+                        },
+                        "curve": {
+                          "default": "step",
+                          "type": "string",
+                          "enum": [
+                            "step",
+                            "linear"
+                          ]
                         }
                       },
                       "required": [
@@ -2896,5 +2904,5 @@
     "transaction"
   ],
   "additionalProperties": false,
-  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/proposal-create-params.schema.json"
+  "$id": "https://github.com/wtydev/aep/schemas/1.0.0/proposal-create-params.schema.json"
 }

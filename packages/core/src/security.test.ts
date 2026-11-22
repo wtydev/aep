@@ -20,7 +20,7 @@ describe('generateCredential', () => {
 });
 
 describe('generateId', () => {
-  it('produces prefixed 16-hex-char ids in the MEP id charset', () => {
+  it('produces prefixed 16-hex-char ids in the AEP id charset', () => {
     expect(generateId('req')).toMatch(/^req-[0-9a-f]{16}$/);
     expect(generateId('s')).toMatch(/^[A-Za-z0-9_-]{1,100}$/);
   });

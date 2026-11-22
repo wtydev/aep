@@ -1,8 +1,7 @@
 import type { NextStep } from './envelope.js';
 
 /**
- * AEP error codes (MEP Core 1 `error.code`, snake_case) and their default `next` hint and
- * result status. Codes shared with MEP Core 1 / MEP 1 reuse the same spelling.
+ * AEP error codes (`error.code`, snake_case) and their default `next` hint and result status.
  */
 export const ERROR_CODES = {
   // envelope / session

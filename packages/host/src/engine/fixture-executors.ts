@@ -6,9 +6,9 @@
  * deterministic `midi.notes.add` operations from a seeded PRNG and is not a composition model.
  * Neither performs DSP, calls an AI provider, or runs project-supplied code.
  */
-import { canonicalJson } from '@aep/core';
-import { beatsToSeconds, unitToSeconds } from '@aep/schema';
-import type { Diagnostic, MidiClip, Note, Operation, Project } from '@aep/schema';
+import { canonicalJson } from '@wty.dev/aep-core';
+import { beatsToSeconds, unitToSeconds } from '@wty.dev/aep-schema';
+import type { Diagnostic, MidiClip, Note, Operation, Project } from '@wty.dev/aep-schema';
 import type { ExecutorDescription, JobContext, JobExecutor, JobInput, JobOutput } from './jobs.js';
 
 export const MANIFEST_RENDERER_ID = 'aep.reference.manifest-renderer';

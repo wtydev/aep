@@ -5,8 +5,8 @@
  * runner. A {@link HostLauncher} gives every test a fresh, isolated host: this is the single
  * integration point for third-party hosts (see the package README).
  */
-import type { AepClient } from '@aep/client';
-import type { Scope } from '@aep/schema';
+import type { AepClient } from '@wty.dev/aep-client';
+import type { Scope, SessionRole } from '@wty.dev/aep-schema';
 import type { TestContext } from './context.js';
 
 /** Conformance levels. A level is achieved when none of its tests fail and at least one passes. */
@@ -18,10 +18,11 @@ export const LEVELS = [
   'assets',
   'jobs',
   'security',
+  'durability',
 ] as const;
 export type Level = (typeof LEVELS)[number];
 
-export type Role = 'read' | 'propose' | 'edit' | 'admin';
+export type Role = SessionRole;
 
 export interface SessionSpec {
   role: Role;
@@ -33,6 +34,12 @@ export interface LaunchOptions {
   fixture?: unknown;
   /** One entry per session the test needs. Session `i` is served to `clients[i]`. */
   sessions: SessionSpec[];
+  /**
+   * The test restarts the host (`LaunchedHost.restart`). The launcher then gives the host a
+   * persistent data directory and must be able to kill and start it again over the same one; if it
+   * cannot, it throws {@link UnsupportedLaunch}.
+   */
+  restart?: boolean;
 }
 
 export interface LaunchedHost {
@@ -40,6 +47,13 @@ export interface LaunchedHost {
   clients: AepClient[];
   /** The credential of each session, in order. Used only to prove it is never echoed. */
   credentials: string[];
+  /**
+   * Only on hosts launched with `restart: true`. Kills the host without a graceful shutdown, starts
+   * it again over the same data directory and fixture, and reconnects. `clients` and `credentials`
+   * are updated in place (same length, same order); the credentials are unchanged because sessions
+   * must survive the restart.
+   */
+  restart?(): Promise<void>;
   /** Stop the host and delete everything the launcher created. */
   close(): Promise<void>;
 }
@@ -65,6 +79,13 @@ export interface ConformanceTest {
   requires?: string[];
   /** Sessions to grant. Default: one `edit` session. */
   sessions?: SessionSpec[];
+  /** Project JSON to start from instead of the standard conformance fixture. */
+  fixture?: unknown;
+  /**
+   * The test restarts the host. Skipped unless the launcher supports restarts and the host reports
+   * `host.durability: 'durable'`.
+   */
+  restart?: boolean;
   run(ctx: TestContext): Promise<void>;
 }
 

@@ -1,11 +1,11 @@
 /**
- * Wire envelope. AEP is a domain profile of MEP Core 1 (`mep/core/1`): every request, result,
- * manifest and state document on the wire is a valid MEP Core 1 document. AEP-specific data
- * travels only inside `params`, `output` and `state.data`. See docs/adr/0001-mep-core-compatibility.md.
+ * AEP 1 wire envelope (`aep/1`): request, result, manifest and state documents. Action data
+ * travels only inside `params`, `output` and `state.data`. See docs/adr/0006-aep-envelope.md.
  */
 import { z } from 'zod';
 
-export const CORE_PROTOCOL = 'mep/core/1' as const;
+/** Wire protocol identifier. Changes only with a new protocol major version. */
+export const CORE_PROTOCOL = 'aep/1' as const;
 
 const CoreId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
 const ActionId = z.string().regex(/^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$/);
@@ -19,7 +19,7 @@ export const RequestId = CoreId;
 export const sanitizeRequestId = (value: unknown): string =>
   CoreId.safeParse(value).success ? (value as string) : 'invalid';
 
-/** Next-step hint for the client (MEP Core 1 enum). */
+/** Next-step hint for the client. */
 export const NextStep = z.enum(['none', 'fix', 'reread', 'ask_user', 'reconcile']);
 export type NextStep = z.infer<typeof NextStep>;
 
@@ -81,7 +81,7 @@ export const ActionDeclaration = z.strictObject({
 });
 export type ActionDeclaration = z.infer<typeof ActionDeclaration>;
 
-/** Session manifest (`mep.json` in the directory binding). Lists only actions this session may use. */
+/** Session manifest (`aep.json` in the directory binding). Lists only actions this session may use. */
 export const CoreManifest = z.strictObject({
   protocol: z.literal(CORE_PROTOCOL),
   session: SessionId,

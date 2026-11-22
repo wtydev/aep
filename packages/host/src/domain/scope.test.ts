@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Operation } from '@aep/schema';
-import type { Diagnostic, Operation as OperationT, Project, Scope } from '@aep/schema';
+import { Operation } from '@wty.dev/aep-schema';
+import type { Diagnostic, Operation as OperationT, Project, Scope } from '@wty.dev/aep-schema';
 import { applyOperation, applyOperations } from './apply.js';
 import { projectDiff } from './diff.js';
 import { checkScope } from './scope.js';
@@ -151,5 +151,26 @@ describe('checkScope — timeRange', () => {
     expect(
       scoped(demoProject(), [move], { timeRange: { start: 0, end: 8, unit: 'beats' } }),
     ).toEqual([]);
+  });
+
+  it('converts extents through a ramped tempo map', () => {
+    // 60→120 bpm linear over beats 0..4 (slope 15): seconds(b) = 4·ln(1 + b/4).
+    // n8 moves 3.5→3.0 beats: extent [4ln1.875≈2.514, 4ln2≈2.773] → [4ln1.75≈2.238, 2.514].
+    const p = demoProject();
+    p.tempo = [
+      { beat: 0, bpm: 60, curve: 'linear' },
+      { beat: 4, bpm: 120, curve: 'step' },
+    ];
+    const move = op({
+      op: 'midi.notes.update',
+      clipId: 'c-midi',
+      updates: [{ noteId: 'n8', patch: { start: 3 } }],
+    });
+    expect(scoped(p, [move], { timeRange: { start: 0, end: 2.8, unit: 'seconds' } })).toEqual([]);
+    const diags = scoped(p, [move], { timeRange: { start: 2.51, end: 2.78, unit: 'seconds' } });
+    expect(diags).toHaveLength(1);
+    expect(diags[0]!.path).toBe('/tracks/t-midi/clips/c-midi/notes/n8');
+    // Beat-unit ranges use the same conversion.
+    expect(scoped(p, [move], { timeRange: { start: 0, end: 4, unit: 'beats' } })).toEqual([]);
   });
 });

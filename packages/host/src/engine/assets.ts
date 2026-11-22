@@ -1,5 +1,6 @@
-import { sha256Hex, generateId } from '@aep/core';
-import type { Asset, Provenance } from '@aep/schema';
+import { sha256Hex, generateId } from '@wty.dev/aep-core';
+import { Asset } from '@wty.dev/aep-schema';
+import type { Provenance } from '@wty.dev/aep-schema';
 
 /** Media types `asset.import` accepts. Anything else is `invalid_params`. */
 export const IMPORTABLE_MEDIA_TYPES: ReadonlySet<string> = new Set([
@@ -89,7 +90,7 @@ export interface AssetMeta {
 export class AssetStore {
   private readonly items = new Map<string, { asset: Asset; bytes: Uint8Array }>();
 
-  /** Register bytes as a new asset. Throws a plain `Error` when an explicit id is taken. */
+  /** Register bytes as a new asset. Throws a plain `Error` when an explicit id is taken or the descriptor is invalid. */
   put(bytes: Uint8Array, meta: AssetMeta): Asset {
     const id = meta.id ?? generateId('asset');
     if (this.items.has(id)) throw new Error(`asset id '${id}' already exists in the store`);
@@ -112,6 +113,8 @@ export class AssetStore {
         asset.durationSeconds = wav.durationSeconds;
       }
     }
+    // Executors call this too: never store a descriptor that would not survive a reload.
+    if (!Asset.safeParse(asset).success) throw new Error('invalid asset descriptor');
     this.items.set(id, { asset, bytes: copy });
     return structuredClone(asset);
   }
@@ -128,5 +131,30 @@ export class AssetStore {
 
   list(): Asset[] {
     return [...this.items.values()].map((i) => structuredClone(i.asset));
+  }
+
+  /** Remove an asset (used to undo a `put` whose request could not be made durable). */
+  delete(id: string): boolean {
+    return this.items.delete(id);
+  }
+
+  /** Descriptors with their bytes, in insertion order. Bytes are shared: do not mutate. */
+  entries(): { asset: Asset; bytes: Uint8Array }[] {
+    return [...this.items.values()].map((i) => ({
+      asset: structuredClone(i.asset),
+      bytes: i.bytes,
+    }));
+  }
+
+  /** Load a previously persisted asset. Throws if the id is taken or the bytes do not match. */
+  restore(asset: Asset, bytes: Uint8Array): void {
+    if (this.items.has(asset.id)) throw new Error(`asset id '${asset.id}' already exists`);
+    if (
+      asset.contentHash !== `sha256:${sha256Hex(bytes)}` ||
+      asset.byteLength !== bytes.byteLength
+    ) {
+      throw new Error(`stored bytes of asset '${asset.id}' do not match its descriptor`);
+    }
+    this.items.set(asset.id, { asset: structuredClone(asset), bytes: Uint8Array.from(bytes) });
   }
 }

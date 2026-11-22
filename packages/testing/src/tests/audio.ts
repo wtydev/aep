@@ -4,6 +4,7 @@
  * beats with sourceOffset 1 s.
  */
 import type { Loose, TestContext } from '../context.js';
+import { CONFORMANCE_FIXTURE } from '../fixture.js';
 import { op } from '../ops.js';
 import { defineLevel } from './define.js';
 
@@ -15,6 +16,23 @@ async function rejects(ctx: TestContext, ops: Loose[], codes: string | string[])
   const r = await ctx.commit(ops, {}, { base: before.revision });
   ctx.expectError(r, codes);
   await ctx.expectUnchanged(before, 'after rejected commit');
+}
+
+/**
+ * A commit rejected by the post-state invariant check: `validation_failed`, with an
+ * `invariant_violation` diagnostic recorded in `receipt.get`.
+ */
+async function violatesInvariant(ctx: TestContext, ops: Loose[], what: string): Promise<void> {
+  const before = await ctx.inspect();
+  const id = ctx.uid('inv');
+  const r = await ctx.commit(ops, {}, { id, base: before.revision });
+  ctx.expectError(r, 'validation_failed');
+  const got = await ctx.receipt(id);
+  ctx.assert(
+    (got.diagnostics ?? []).some((d: Loose) => d.code === 'invariant_violation'),
+    `${what}: no invariant_violation diagnostic: ${JSON.stringify(got.diagnostics)}`,
+  );
+  await ctx.expectUnchanged(before, `${what}: after rejected commit`);
 }
 
 export const audioTests = [
@@ -484,6 +502,93 @@ export const audioTests = [
     },
   ),
 
+  t(
+    'clips.source-bounds',
+    'an audio clip reading past the end of its asset violates invariant 15',
+    async (ctx) => {
+      // a-1 is 10 s long. c-audio starts at source 1 s: 4 beats at 120 bpm = 2 s read.
+      await violatesInvariant(
+        ctx,
+        [op.insertAudioClip('t-audio', 'c-long', 10, 20, { timebase: 'seconds' })],
+        'clip longer than the asset',
+      );
+      await violatesInvariant(
+        ctx,
+        [{ op: 'clip.update', clipId: 'c-audio', patch: { sourceOffset: 9.5 } }],
+        'sourceOffset near the end',
+      );
+      await violatesInvariant(
+        ctx,
+        [{ op: 'clip.update', clipId: 'c-audio', patch: { playbackRate: 8 } }],
+        'playbackRate reading 16 s of source',
+      );
+      // Exactly the asset end is fine: sourceOffset 8 + 2 s read = 10 s.
+      await ctx.commitOk([{ op: 'clip.update', clipId: 'c-audio', patch: { sourceOffset: 8 } }]);
+    },
+  ),
+
+  t(
+    'clips.loop-source-bound',
+    'a looping audio clip is bounded by sourceOffset + loop.length, not by its timeline length',
+    async (ctx) => {
+      // 30 s on the timeline looping 2 s of source is fine (1 + 2 ≤ 10) ...
+      await ctx.commitOk([
+        op.insertAudioClip('t-audio', 'c-loop', 20, 30, {
+          timebase: 'seconds',
+          sourceOffset: 1,
+          loop: { enabled: true, length: 2 },
+        }),
+      ]);
+      ctx.same(ctx.clip(await ctx.project(), 'c-loop').loop, { enabled: true, length: 2 }, 'loop');
+      // ... a loop region reaching past the asset end is not.
+      await violatesInvariant(
+        ctx,
+        [{ op: 'clip.update', clipId: 'c-loop', patch: { loop: { enabled: true, length: 9.5 } } }],
+        'loop.length past the asset end',
+      );
+      // With the loop off the clip reads its full 30 s from the asset: also out of bounds.
+      await violatesInvariant(
+        ctx,
+        [{ op: 'clip.update', clipId: 'c-loop', patch: { loop: { enabled: false, length: 2 } } }],
+        'loop disabled on a long clip',
+      );
+      await ctx.commitOk([
+        { op: 'clip.update', clipId: 'c-loop', patch: { loop: { enabled: true, length: 9 } } },
+      ]);
+      ctx.equal(ctx.clip(await ctx.project(), 'c-loop').loop.length, 9, 'loop.length at the bound');
+    },
+  ),
+
+  t(
+    'clips.midi-asset',
+    "an audio clip cannot reference an asset of media type 'audio/midi'",
+    async (ctx) => {
+      const codes = ['validation_failed', 'precondition_failed'];
+      await rejects(
+        ctx,
+        [op.insertAudioClip('t-audio', 'c-mid', 10, 1, { assetId: 'a-mid' })],
+        codes,
+      );
+    },
+    {
+      fixture: {
+        ...CONFORMANCE_FIXTURE,
+        assets: [
+          ...CONFORMANCE_FIXTURE.assets,
+          {
+            id: 'a-mid',
+            name: 'riff.mid',
+            mediaType: 'audio/midi',
+            contentHash: `sha256:${'1'.repeat(64)}`,
+            byteLength: 128,
+            availability: 'available',
+            portability: 'host-local',
+          },
+        ],
+      },
+    },
+  ),
+
   // ------------------------------------------------------------------ MIDI
   t(
     'midi.notes-add',
@@ -517,6 +622,18 @@ export const audioTests = [
         ctx,
         [{ op: 'midi.notes.add', clipId: 'ghost', notes: [op.note('z1')] }],
         'not_found',
+      );
+    },
+  ),
+
+  t(
+    'midi.notes-add-duplicate-batch',
+    'midi.notes.add rejects two notes with the same id in one batch',
+    async (ctx) => {
+      await rejects(
+        ctx,
+        [{ op: 'midi.notes.add', clipId: 'c-midi', notes: [op.note('dup'), op.note('dup', 62)] }],
+        'precondition_failed',
       );
     },
   ),
@@ -607,7 +724,7 @@ export const audioTests = [
     async (ctx) => {
       await ctx.commitOk([{ op: 'tempo.update', tempo: [{ beat: 0, bpm: 60 }] }]);
       const p = await ctx.project();
-      ctx.same(p.tempo, [{ beat: 0, bpm: 60 }], 'tempo map');
+      ctx.same(p.tempo, [{ beat: 0, bpm: 60, curve: 'step' }], 'tempo map (default curve step)');
       const d = await ctx.callOk('project.describe');
       ctx.close(d.durationSeconds, 8, 'duration at 60 bpm (8 beats)');
       await ctx.commitOk([
@@ -665,6 +782,41 @@ export const audioTests = [
         'invalid_params',
       );
       ctx.expectError(await ctx.commit([{ op: 'tempo.update', tempo: [] }]), 'invalid_params');
+    },
+  ),
+
+  t(
+    'tempo.linear-ramp',
+    'a linear tempo ramp round-trips and durationSeconds follows the ramp formula',
+    async (ctx) => {
+      // Ramp 60 → 120 bpm over beats 0..4: k = 15 bpm/beat, seconds(4) = 60/k · ln(120/60).
+      const tempo = [
+        { beat: 0, bpm: 60, curve: 'linear' },
+        { beat: 4, bpm: 120, curve: 'step' },
+      ];
+      await ctx.commitOk([{ op: 'tempo.update', tempo }]);
+      ctx.same((await ctx.project()).tempo, tempo, 'tempo map round trip');
+      const ramp = 4 * Math.LN2;
+      const d = await ctx.callOk('project.describe');
+      // The last clip ends at beat 8: the ramp, then 4 beats at 120 bpm (2 s).
+      ctx.close(d.durationSeconds, ramp + 2, 'durationSeconds across the ramp', 1e-6);
+      ctx.close(d.durationBeats, 8, 'durationBeats', 1e-6);
+      // The tempo of the last point's curve is ignored: a linear last point changes nothing.
+      await ctx.commitOk([
+        {
+          op: 'tempo.update',
+          tempo: [
+            { beat: 0, bpm: 60, curve: 'linear' },
+            { beat: 4, bpm: 120, curve: 'linear' },
+          ],
+        },
+      ]);
+      ctx.close(
+        (await ctx.callOk('project.describe')).durationSeconds,
+        ramp + 2,
+        'durationSeconds, linear last point',
+        1e-6,
+      );
     },
   ),
 
@@ -828,6 +980,38 @@ export const audioTests = [
     },
   ),
 
+  t(
+    'routing.duplicate-sends',
+    'routing.update rejects two sends to the same target track',
+    async (ctx) => {
+      await ctx.commitOk([op.addTrack('t-bus2', 'bus')]);
+      await rejects(
+        ctx,
+        [
+          {
+            op: 'routing.update',
+            trackId: 't-midi',
+            sends: [
+              { targetTrackId: 't-bus', gainDb: 0, preFader: false },
+              { targetTrackId: 't-bus', gainDb: -3, preFader: true },
+            ],
+          },
+        ],
+        'precondition_failed',
+      );
+      await ctx.commitOk([
+        {
+          op: 'routing.update',
+          trackId: 't-midi',
+          sends: [
+            { targetTrackId: 't-bus', gainDb: 0, preFader: false },
+            { targetTrackId: 't-bus2', gainDb: -3, preFader: true },
+          ],
+        },
+      ]);
+    },
+  ),
+
   t('routing.cycle', 'a routing cycle is rejected', async (ctx) => {
     await ctx.commitOk([op.addTrack('t-bus2', 'bus', { output: 't-bus' })]);
     await rejects(
@@ -909,6 +1093,52 @@ export const audioTests = [
         ['fx-a'],
         'chain after remove',
       );
+    },
+  ),
+
+  t(
+    'devices.blocked-by-lane',
+    'effect.remove and instrument.set are refused while an automation lane targets the device',
+    async (ctx) => {
+      const lane = (deviceId: string, id: string): Loose => ({
+        op: 'automation.lane.add',
+        trackId: 't-midi',
+        lane: {
+          id,
+          target: { kind: 'device', deviceId, parameter: 'gain' },
+          timebase: 'beats',
+          points: [],
+        },
+      });
+      await ctx.commitOk([
+        { op: 'effect.insert', trackId: 't-midi', effect: op.device('fx-1', 'aep.gain') },
+        lane('fx-1', 'lane-fx'),
+        lane('dev-inst', 'lane-inst'),
+      ]);
+      await rejects(ctx, [{ op: 'effect.remove', deviceId: 'fx-1' }], 'precondition_failed');
+      await rejects(
+        ctx,
+        [{ op: 'instrument.set', trackId: 't-midi', instrument: null }],
+        'precondition_failed',
+      );
+      await rejects(
+        ctx,
+        [
+          {
+            op: 'instrument.set',
+            trackId: 't-midi',
+            instrument: op.device('inst-2', 'aep.sampler'),
+          },
+        ],
+        'precondition_failed',
+      );
+      // Removing the lane first (in the same transaction) unblocks the device.
+      await ctx.commitOk([
+        { op: 'automation.lane.remove', laneId: 'lane-fx' },
+        { op: 'effect.remove', deviceId: 'fx-1' },
+        { op: 'automation.lane.remove', laneId: 'lane-inst' },
+        { op: 'instrument.set', trackId: 't-midi', instrument: null },
+      ]);
     },
   ),
 

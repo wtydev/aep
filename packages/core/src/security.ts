@@ -12,7 +12,7 @@ export function generateCredential(): string {
   return randomBytes(32).toString('base64url');
 }
 
-/** `prefix` + '-' + 16 hex chars; the result matches the MEP Core id charset. */
+/** `prefix` + '-' + 16 hex chars; the result matches the AEP id charset. */
 export function generateId(prefix: string): string {
   return `${prefix}-${randomBytes(8).toString('hex')}`;
 }

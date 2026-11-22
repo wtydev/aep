@@ -1,16 +1,16 @@
-import { ERROR_CODES } from '@aep/schema';
-import type { CoreError, Diagnostic, ErrorCode, NextStep, ResultStatus } from '@aep/schema';
+import { ERROR_CODES } from '@wty.dev/aep-schema';
+import type { CoreError, Diagnostic, ErrorCode, NextStep, ResultStatus } from '@wty.dev/aep-schema';
 
-/** Maximum MEP Core error message length, in code points. */
+/** Maximum AEP error message length, in code points. */
 export const MAX_MESSAGE_CODE_POINTS = 1200;
 
-/** Truncate a message to the MEP Core limit without splitting a code point. */
+/** Truncate a message to the AEP limit without splitting a code point. */
 export const clampMessage = (m: string): string =>
   [...m].slice(0, MAX_MESSAGE_CODE_POINTS).join('');
 
 /**
  * SDK error carrying an AEP `ErrorCode`. `status` and `next` are derived from `ERROR_CODES`
- * in @aep/schema so producers cannot pick an inconsistent hint.
+ * in @wty.dev/aep-schema so producers cannot pick an inconsistent hint.
  */
 export class AepError extends Error {
   readonly code: ErrorCode;
@@ -28,7 +28,7 @@ export class AepError extends Error {
     this.next = meta.next;
   }
 
-  /** MEP Core error object. Message is truncated to 1200 code points per the schema limit. */
+  /** AEP error object. Message is truncated to 1200 code points per the schema limit. */
   toCoreError(): CoreError {
     const message = clampMessage(this.message) || this.code;
     return { code: this.code, next: this.next, message };

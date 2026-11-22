@@ -90,7 +90,10 @@ export const assetTests = [
       ctx.assert(linked, 'asset missing from the project after linking');
       ctx.equal(linked.contentHash, asset.contentHash, 'contentHash survives linking');
       await ctx.commitOk([
-        op.insertAudioClip('t-audio', 'c-imp', 10, 1, { assetId: 'imp-1', timebase: 'seconds' }),
+        op.insertAudioClip('t-audio', 'c-imp', 10, INBOX.wavSeconds, {
+          assetId: 'imp-1',
+          timebase: 'seconds',
+        }),
       ]);
       ctx.equal(ctx.clip(await ctx.project(), 'c-imp').assetId, 'imp-1', 'clip assetId');
       // Linking twice is an error, and a referenced asset cannot be unlinked.

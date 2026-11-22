@@ -10,7 +10,7 @@ The model also has to support diffs, scope checks and undo. Each of these works 
 
 ## Decision
 
-The canonical model is a JSON document: one `Project` with tracks, clips, devices, automation lanes, sections, assets, and tempo and meter maps. It is defined by zod schemas in `@aep/schema` and exported as JSON Schema under `schemas/`. The schemas are the source of truth. `specs/audio/AUDIO-DOMAIN.md` describes them in prose.
+The canonical model is a JSON document: one `Project` with tracks, clips, devices, automation lanes, sections, assets, and tempo and meter maps. It is defined by zod schemas in `@wty.dev/aep-schema` and exported as JSON Schema under `schemas/`. The schemas are the source of truth. `specs/audio/AUDIO-DOMAIN.md` describes them in prose.
 
 Specific decisions:
 
@@ -31,6 +31,16 @@ Specific decisions:
 - Storage is free. A host may keep a different internal form if its observable behaviour matches.
 - Some invariants are not checked by the schemas and are checked by the invariant set instead (`AUDIO-DOMAIN.md` section 7). This split is a known source of error, and the spec records what is not checked.
 - Intentional gaps remain: no ramps, no re-anchoring of beat positions on tempo change, no source length bounds on clips, and no unit for `loop.length`.
+
+## Note, 2026-11-22
+
+AEP 1.0 resolved three of the gaps listed under Consequences:
+
+- Ramps: `TempoPoint.curve` (`step` or `linear`) shapes the segment to the next tempo point (`AUDIO-DOMAIN.md` section 2.2).
+- `loop.length` has a defined unit (`AUDIO-DOMAIN.md` section 2.4).
+- Audio clips have source bounds, enforced by invariant 15 (`AUDIO-DOMAIN.md` section 7.1).
+
+Beat positions are still not re-anchored when the tempo map changes. The body above is kept as the record of the original decision.
 
 ## Alternatives considered
 

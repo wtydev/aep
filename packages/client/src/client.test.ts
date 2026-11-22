@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ActionName } from '@aep/schema';
-import { InMemoryTransport } from '@aep/transport';
-import type { ClientTransport } from '@aep/transport';
+import type { ActionName } from '@wty.dev/aep-schema';
+import { InMemoryTransport } from '@wty.dev/aep-transport';
+import type { ClientTransport } from '@wty.dev/aep-transport';
 import { FakeHandler } from '../../transport/src/test-handler.js';
 import { AepClient, AepRequestError } from './client.js';
 

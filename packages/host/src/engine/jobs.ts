@@ -1,5 +1,5 @@
-import { AepError, generateId, isAepError } from '@aep/core';
-import { Operation } from '@aep/schema';
+import { AepError, generateId, isAepError } from '@wty.dev/aep-core';
+import { Job as JobSchema, Operation } from '@wty.dev/aep-schema';
 import type {
   Asset,
   Diagnostic,
@@ -7,7 +7,7 @@ import type {
   Job,
   Project,
   RenderRequestParams,
-} from '@aep/schema';
+} from '@wty.dev/aep-schema';
 import type { AssetMeta, AssetStore } from './assets.js';
 
 /** What an executor declares about itself (surfaced through `aep.capabilities`). */
@@ -62,7 +62,8 @@ export interface JobExecutor {
 
 interface JobRecord {
   job: Job;
-  executor: JobExecutor;
+  /** Absent for records restored from storage: they are terminal and never run. */
+  executor: JobExecutor | undefined;
   /** Project snapshot for the executor; released once the job settles. */
   input: JobInput | undefined;
   controller: AbortController;
@@ -83,7 +84,14 @@ const TERMINAL: ReadonlySet<Job['state']> = new Set(['succeeded', 'failed', 'can
 export class JobManager {
   private readonly jobs = new Map<string, JobRecord>();
 
-  constructor(private readonly deps: { assets: AssetStore; clock: () => number }) {}
+  constructor(
+    private readonly deps: {
+      assets: AssetStore;
+      clock: () => number;
+      /** Called after a job settles by itself (succeeded or failed), not after `cancel`. */
+      onSettled?: () => void;
+    },
+  ) {}
 
   private now(): string {
     return new Date(this.deps.clock()).toISOString();
@@ -113,14 +121,66 @@ export class JobManager {
     rec.done = new Promise<void>((resolve) => {
       rec.settle = resolve;
     });
+    this.jobs.set(id, rec);
+    return structuredClone(job);
+  }
+
+  /**
+   * Start a job created with {@link create}. Hosts call it once the request that created the job
+   * is durable, so an executor never runs (or registers assets) for a request that is rolled back.
+   */
+  start(id: string): void {
+    const rec = this.jobs.get(id);
+    if (!rec || rec.job.state !== 'queued' || rec.input === undefined) return;
     setImmediate(() => {
       void this.run(rec).finally(() => {
         rec.input = undefined;
         rec.settle();
       });
     });
-    this.jobs.set(id, rec);
-    return structuredClone(job);
+  }
+
+  /** Every job record (clones), oldest first. */
+  list(): Job[] {
+    return [...this.jobs.values()].map((r) => structuredClone(r.job));
+  }
+
+  /**
+   * Load persisted job records. Records still `queued` or `running` cannot be resumed (the
+   * executor and its input are gone): they become `failed` with `internal_error`.
+   * Returns true when at least one record was changed that way.
+   */
+  restore(jobs: Job[]): boolean {
+    let interrupted = false;
+    for (const original of jobs) {
+      const job = structuredClone(original);
+      if (job.state === 'queued' || job.state === 'running') {
+        job.state = 'failed';
+        job.error = { code: 'internal_error', message: 'interrupted by host restart' };
+        job.updatedAt = this.now();
+        interrupted = true;
+      }
+      this.jobs.set(job.id, {
+        job,
+        executor: undefined,
+        input: undefined,
+        controller: new AbortController(),
+        done: Promise.resolve(),
+        settle: () => {},
+      });
+    }
+    return interrupted;
+  }
+
+  /** Abort and forget a job (used to undo a `create` whose request could not be made durable). */
+  discard(id: string): void {
+    const rec = this.jobs.get(id);
+    if (!rec) return;
+    rec.controller.abort();
+    rec.job.state = 'cancelled';
+    rec.input = undefined;
+    rec.settle();
+    this.jobs.delete(id);
   }
 
   get(id: string): Job | undefined {
@@ -150,7 +210,7 @@ export class JobManager {
 
   private async run(rec: JobRecord): Promise<void> {
     const { job, executor, controller, input } = rec;
-    if (job.state !== 'queued' || !input) return; // cancelled before it started
+    if (job.state !== 'queued' || !input || !executor) return; // cancelled before it started
     job.state = 'running';
     job.updatedAt = this.now();
     const produced: Asset[] = [];
@@ -172,13 +232,22 @@ export class JobManager {
       const out = await executor.run(structuredClone(input), ctx);
       if (controller.signal.aborted) return;
       const operations = out.operations ? Operation.array().parse(out.operations) : undefined;
+      // Report the store's own descriptors: an executor cannot invent or alter an asset.
+      const assets = (out.assets ?? produced).map((a) => {
+        const stored = this.deps.assets.get(a.id);
+        if (!stored) throw new Error('executor reported an asset that is not in the store');
+        return stored;
+      });
+      const result = JobSchema.shape.result.unwrap().parse({
+        assets,
+        ...(operations ? { operations } : {}),
+        reproducibility: JSON.parse(
+          JSON.stringify({ executor: executor.id, ...out.reproducibility }),
+        ) as Record<string, unknown>,
+      });
       job.state = 'succeeded';
       job.progress = 1;
-      job.result = {
-        assets: [...(out.assets ?? produced)],
-        ...(operations ? { operations } : {}),
-        reproducibility: { executor: executor.id, ...out.reproducibility },
-      };
+      job.result = result;
     } catch (e) {
       if (controller.signal.aborted) return;
       job.state = 'failed';
@@ -188,5 +257,6 @@ export class JobManager {
         : { code: 'internal_error', message: 'job executor failed' };
     }
     job.updatedAt = this.now();
+    this.deps.onSettled?.();
   }
 }

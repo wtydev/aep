@@ -1,6 +1,6 @@
 {
-  "name": "@aep/example-minimal-client",
-  "version": "0.1.0",
+  "name": "aep-example-minimal-client",
+  "version": "1.0.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -8,9 +8,9 @@
     "aep-demo-client": "./dist/main.js"
   },
   "dependencies": {
-    "@aep/schema": "workspace:*",
-    "@aep/core": "workspace:*",
-    "@aep/client": "workspace:*",
-    "@aep/transport": "workspace:*"
+    "@wty.dev/aep-schema": "workspace:*",
+    "@wty.dev/aep-core": "workspace:*",
+    "@wty.dev/aep-client": "workspace:*",
+    "@wty.dev/aep-transport": "workspace:*"
   }
 }
