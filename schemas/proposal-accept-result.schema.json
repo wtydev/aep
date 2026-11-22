@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "transactionId": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "commit",
+        "proposal",
+        "undo",
+        "redo"
+      ]
+    },
+    "projectId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "baseRevision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "committedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "client": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "session": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "session"
+      ],
+      "additionalProperties": false
+    },
+    "label": {
+      "type": "string"
+    },
+    "operationCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entity": {
+            "type": "string",
+            "enum": [
+              "project",
+              "tempo",
+              "meter",
+              "trackOrder",
+              "track",
+              "instrument",
+              "effectOrder",
+              "effect",
+              "clip",
+              "note",
+              "midiEvents",
+              "automationLane",
+              "section",
+              "asset"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove",
+              "update"
+            ]
+          },
+          "before": {},
+          "after": {},
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "path",
+          "entity",
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "created": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "undoable": {
+      "type": "boolean"
+    },
+    "proposalId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "targetTransactionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "transactionId",
+    "kind",
+    "projectId",
+    "baseRevision",
+    "revision",
+    "committedAt",
+    "client",
+    "operationCount",
+    "operations",
+    "changes",
+    "created",
+    "removed",
+    "undoable"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/proposal-accept-result.schema.json"
+}

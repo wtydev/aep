@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "aep": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "string"
+        },
+        "supportedVersions": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "schemaVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "supportedVersions",
+        "schemaVersion"
+      ],
+      "additionalProperties": false
+    },
+    "host": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "options": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "project.update",
+          "track.add",
+          "track.update",
+          "track.remove",
+          "track.reorder",
+          "clip.insert",
+          "clip.update",
+          "clip.remove",
+          "clip.move",
+          "clip.trim",
+          "clip.split",
+          "clip.duplicate",
+          "midi.notes.add",
+          "midi.notes.update",
+          "midi.notes.remove",
+          "midi.events.update",
+          "tempo.update",
+          "meter.update",
+          "section.add",
+          "section.update",
+          "section.remove",
+          "routing.update",
+          "instrument.set",
+          "effect.insert",
+          "effect.update",
+          "effect.remove",
+          "automation.lane.add",
+          "automation.points.update",
+          "automation.lane.remove",
+          "asset.link",
+          "asset.unlink"
+        ]
+      }
+    },
+    "trackKinds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "deviceTypes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "generators": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "outputs": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "audio",
+                "midi",
+                "operations"
+              ]
+            }
+          },
+          "parametersSchema": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "deterministic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "outputs",
+          "parametersSchema",
+          "deterministic"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "maxOperationsPerTransaction": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxRequestBytes": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxNotesPerClip": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxTracks": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxOpenProposals": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "receiptRetention": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "maxOperationsPerTransaction",
+        "maxRequestBytes",
+        "maxNotesPerClip",
+        "maxTracks",
+        "maxOpenProposals",
+        "receiptRetention"
+      ],
+      "additionalProperties": false
+    },
+    "session": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "read",
+            "propose",
+            "edit",
+            "admin"
+          ]
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tracks": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              }
+            },
+            "clips": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              }
+            },
+            "timeRange": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "beats",
+                    "seconds",
+                    "samples"
+                  ]
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            "operations": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9.]*(\\.\\*)?$|^\\*$"
+              }
+            },
+            "properties": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "expiresAt": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "role",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "aep",
+    "host",
+    "capabilities",
+    "operations",
+    "trackKinds",
+    "deviceTypes",
+    "generators",
+    "limits",
+    "session"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/aep-capabilities-result.schema.json"
+}

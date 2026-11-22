@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/schema" },
+    { "path": "packages/core" },
+    { "path": "packages/transport" },
+    { "path": "packages/host" },
+    { "path": "packages/client" },
+    { "path": "packages/testing" },
+    { "path": "examples/minimal-host" },
+    { "path": "examples/minimal-client" }
+  ]
+}

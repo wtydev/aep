@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "const": "mep/core/1"
+    },
+    "session": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,100}$"
+    },
+    "workspace": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,100}$"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {}
+  },
+  "required": [
+    "protocol",
+    "session",
+    "workspace",
+    "revision",
+    "data"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/core-state.schema.json"
+}
