@@ -1,6 +1,6 @@
 /** Level `core`: envelope, auth, idempotency, revisions, transactions. */
-import { ACTIONS, CORE_PROTOCOL, ROLE_ACTIONS } from '@aep/schema';
-import type { ActionName } from '@aep/schema';
+import { ACTIONS, CORE_PROTOCOL, ROLE_ACTIONS } from '@wty.dev/aep-schema';
+import type { ActionName } from '@wty.dev/aep-schema';
 import type { Loose } from '../context.js';
 import { op } from '../ops.js';
 import { defineLevel } from './define.js';
@@ -56,7 +56,7 @@ export const coreTests = [
   t('envelope.bad-request', 'a malformed envelope is rejected with bad_request', async (ctx) => {
     ctx.expectError(await ctx.raw({ unexpected: true }), 'bad_request');
     ctx.expectError(await ctx.raw({ params: undefined }), 'bad_request');
-    ctx.expectError(await ctx.raw({ protocol: 'mep/core/9' }), 'bad_request');
+    ctx.expectError(await ctx.raw({ protocol: 'aep/9' }), 'bad_request');
     ctx.expectError(await ctx.raw({ version: 'one' }), 'bad_request');
   }),
 
@@ -114,6 +114,54 @@ export const coreTests = [
     }
     ctx.assert(caps.trackKinds.includes('midi'), 'trackKinds lacks midi');
   }),
+
+  t(
+    'envelope.capabilities-versions',
+    'aep.capabilities reports protocol 1.0, schema 1.0.0 and a durability class',
+    async (ctx) => {
+      const caps = await ctx.callOk('aep.capabilities');
+      ctx.equal(caps.aep.protocolVersion, '1.0', 'aep.protocolVersion');
+      ctx.assert(
+        caps.aep.supportedVersions.includes('1.0'),
+        `supportedVersions lacks 1.0: ${JSON.stringify(caps.aep.supportedVersions)}`,
+      );
+      ctx.equal(caps.aep.schemaVersion, '1.0.0', 'aep.schemaVersion');
+      ctx.assert(
+        ['durable', 'volatile'].includes(caps.host.durability),
+        `host.durability must be durable or volatile, got ${JSON.stringify(caps.host.durability)}`,
+      );
+    },
+  ),
+
+  t(
+    'envelope.version-negotiation',
+    'aep.capabilities negotiates the highest common protocol version or fails with unsupported_version',
+    async (ctx) => {
+      const negotiated = await ctx.callOk('aep.capabilities', { versions: ['1.0', '1.7'] });
+      ctx.equal(negotiated.aep.protocolVersion, '1.0', 'negotiated from [1.0, 1.7]');
+      const only = await ctx.callOk('aep.capabilities', { versions: ['1.0'] });
+      ctx.equal(only.aep.protocolVersion, '1.0', 'negotiated from [1.0]');
+      // A newer minor of the same major is compatible: it negotiates down to the host's version.
+      const newer = await ctx.callOk('aep.capabilities', { versions: ['1.7'] });
+      ctx.equal(newer.aep.protocolVersion, '1.0', 'negotiated from [1.7]');
+      for (const versions of [['0.1'], ['2.0'], ['0.9', '2.1']]) {
+        const r = await ctx.call('aep.capabilities', { versions });
+        ctx.expectError(r, 'unsupported_version', { next: 'fix' });
+      }
+    },
+  ),
+
+  t(
+    'envelope.legacy-protocol',
+    "the retired protocol id 'mep/core/1' is rejected with bad_request",
+    async (ctx) => {
+      ctx.expectError(await ctx.raw({ protocol: 'mep/core/1' }), 'bad_request');
+      ctx.expectError(
+        await ctx.raw({ protocol: 'mep/core/1', action: 'aep.capabilities' }),
+        'bad_request',
+      );
+    },
+  ),
 
   // ------------------------------------------------------------------ auth
   t('auth.bad-credential', 'a wrong credential is rejected with not_authorized', async (ctx) => {

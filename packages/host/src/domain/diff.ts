@@ -1,5 +1,5 @@
-import type { Change, EntityKind, Project } from '@aep/schema';
-import { diffEntities } from '@aep/core';
+import type { Change, EntityKind, Project } from '@wty.dev/aep-schema';
+import { diffEntities } from '@wty.dev/aep-core';
 import { flattenProject } from './flatten.js';
 
 /** Diff two project states as entity changes (receipts, scope checks, proposals, history). */

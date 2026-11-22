@@ -1,6 +1,7 @@
 {
-  "name": "@aep/host",
-  "version": "0.1.0",
+  "name": "@wty.dev/aep-host",
+  "version": "1.0.0",
+  "description": "Reference AEP host engine: sessions, transactions, proposals, history, assets and jobs",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,11 +23,29 @@
     "url": "https://github.com/wtydev/aep",
     "directory": "packages/host"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": [
+    "aep",
+    "audio",
+    "protocol",
+    "host",
+    "daw"
+  ],
+  "homepage": "https://github.com/wtydev/aep#readme",
+  "bugs": {
+    "url": "https://github.com/wtydev/aep/issues"
+  },
   "scripts": {
     "build": "tsc -b"
   },
   "dependencies": {
-    "@aep/schema": "workspace:*",
-    "@aep/core": "workspace:*"
+    "@wty.dev/aep-schema": "workspace:*",
+    "@wty.dev/aep-core": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Diagnostic, Limits, Project } from '@aep/schema';
+import type { AudioClip, Diagnostic, Limits, Project } from '@wty.dev/aep-schema';
 import { validateInvariants } from './invariants.js';
 import { DEMO_LIMITS, demoProject } from './fixtures.js';
 
@@ -35,8 +35,8 @@ describe('validateInvariants', () => {
   it('catches unsorted and non-zero-based tempo and meter maps', () => {
     const p = mutate((p) => {
       p.tempo = [
-        { beat: 4, bpm: 120 },
-        { beat: 0, bpm: 90 },
+        { beat: 4, bpm: 120, curve: 'step' },
+        { beat: 0, bpm: 90, curve: 'step' },
       ];
       p.meter = [{ bar: 1, numerator: 4, denominator: 4 }];
     });
@@ -120,5 +120,146 @@ describe('validateInvariants', () => {
       if (clip.type === 'midi') clip.notes.push({ ...clip.notes[0]! });
     });
     expect(messages(check(p))).toContain("duplicate note id 'n1'");
+  });
+
+  it('catches device-target lanes whose device is not on the same track', () => {
+    const p = mutate((p) => {
+      // 'dev-inst' lives on t-midi, not t-audio; 'nope' exists nowhere.
+      const audio = p.tracks.find((t) => t.id === 't-audio')!;
+      audio.automation.push(
+        {
+          id: 'al-1',
+          target: { kind: 'device', deviceId: 'dev-inst', parameter: 'gain' },
+          timebase: 'beats',
+          points: [],
+        },
+        {
+          id: 'al-2',
+          target: { kind: 'device', deviceId: 'nope', parameter: 'gain' },
+          timebase: 'beats',
+          points: [],
+        },
+      );
+      // A lane on the same track as its device is fine.
+      p.tracks
+        .find((t) => t.id === 't-midi')!
+        .automation.push({
+          id: 'al-3',
+          target: { kind: 'device', deviceId: 'dev-inst', parameter: 'gain' },
+          timebase: 'beats',
+          points: [],
+        });
+    });
+    const m = messages(check(p));
+    expect(m).toContain(
+      "automation lane 'al-1' targets device 'dev-inst' which is not on track 't-audio'",
+    );
+    expect(m).toContain(
+      "automation lane 'al-2' targets device 'nope' which is not on track 't-audio'",
+    );
+    expect(m).not.toContain('al-3');
+  });
+
+  it('catches unsorted and duplicated automation lane points', () => {
+    const p = mutate((p) => {
+      p.tracks
+        .find((t) => t.id === 't-audio')!
+        .automation.push(
+          {
+            id: 'al-1',
+            target: { kind: 'track', parameter: 'gainDb' },
+            timebase: 'beats',
+            points: [
+              { time: 2, value: 0, curve: 'linear' },
+              { time: 1, value: 0, curve: 'linear' },
+            ],
+          },
+          {
+            id: 'al-2',
+            target: { kind: 'track', parameter: 'pan' },
+            timebase: 'beats',
+            points: [
+              { time: 0, value: 0, curve: 'linear' },
+              { time: 0, value: 1, curve: 'linear' },
+            ],
+          },
+        );
+    });
+    const m = messages(check(p));
+    expect(m).toContain("automation lane 'al-1' points are not sorted by time");
+    expect(m).toContain("automation lane 'al-2' has a duplicate point time 0");
+  });
+
+  it('catches duplicate send targets within a track', () => {
+    const p = mutate((p) => {
+      p.tracks.find((t) => t.id === 't-midi')!.sends = [
+        { targetTrackId: 't-bus', gainDb: 0, preFader: false },
+        { targetTrackId: 't-bus', gainDb: -3, preFader: false },
+      ];
+    });
+    expect(messages(check(p))).toContain("track 't-midi' has duplicate send target 't-bus'");
+  });
+
+  it('catches non-audio asset media types on audio clips', () => {
+    const midiAsset = mutate((p) => {
+      p.assets[0]!.mediaType = 'audio/midi';
+    });
+    expect(messages(check(midiAsset))).toContain(
+      "clip 'c-audio' references asset 'a-1' with mediaType 'audio/midi'",
+    );
+    const nonAudio = mutate((p) => {
+      p.assets[0]!.mediaType = 'application/zip';
+    });
+    expect(messages(check(nonAudio))).toContain("mediaType 'application/zip'");
+  });
+
+  it('catches audio clips reading beyond the asset durationSeconds', () => {
+    const audioClip = (p: Project): AudioClip => {
+      const c = p.tracks.find((t) => t.id === 't-audio')!.clips[0]!;
+      if (c.type !== 'audio') throw new Error('not an audio clip');
+      return c;
+    };
+    // Demo clip: 4 beats @120bpm = 2s, sourceOffset 1, rate 1, asset 4s → boundary ok.
+    const atBoundary = mutate((p) => {
+      audioClip(p).sourceOffset = 2;
+    });
+    expect(check(atBoundary)).toEqual([]);
+    const overByOffset = mutate((p) => {
+      audioClip(p).sourceOffset = 2.5;
+    });
+    expect(messages(check(overByOffset))).toContain('durationSeconds 4');
+    const overByRate = mutate((p) => {
+      audioClip(p).playbackRate = 3;
+    });
+    expect(messages(check(overByRate))).toContain('reads source up to 7s');
+    // Loop bounds use loop.length instead of the clip's timeline length.
+    const loopOver = mutate((p) => {
+      audioClip(p).loop = { enabled: true, length: 3.5 };
+    });
+    expect(messages(check(loopOver))).toContain('reads source up to 4.5s');
+    const loopInside = mutate((p) => {
+      audioClip(p).loop = { enabled: true, length: 3 };
+    });
+    expect(check(loopInside)).toEqual([]);
+    // A disabled loop falls back to the timeline-length rule.
+    const loopDisabled = mutate((p) => {
+      audioClip(p).loop = { enabled: false, length: 1 };
+      audioClip(p).sourceOffset = 2.5;
+    });
+    expect(messages(check(loopDisabled))).toContain('reads source up to 4.5s');
+    // Assets without durationSeconds are not checked.
+    const noDuration = mutate((p) => {
+      delete p.assets[0]!.durationSeconds;
+      audioClip(p).sourceOffset = 500;
+    });
+    expect(check(noDuration)).toEqual([]);
+    // A beats-timebase clip is measured through the tempo map: at 60bpm, 9 beats
+    // of clip is 9 seconds of source.
+    const slowerTempo = mutate((p) => {
+      p.tempo = [{ beat: 0, bpm: 60, curve: 'step' }];
+      audioClip(p).sourceOffset = 0;
+      audioClip(p).duration = 9;
+    });
+    expect(messages(check(slowerTempo))).toContain('reads source up to 9s');
   });
 });

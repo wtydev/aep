@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * aep-conformance [--json] [--level a,b] [--filter text] [--concurrency n] [--timeout ms]
- *                 [--list] [--help] [-- <host command...>]
+ *                 [--no-restart] [--list] [--help] [-- <host command...>]
  */
 import { parseArgs } from 'node:util';
 import { InProcessLauncher, ProcessLauncher } from './launchers.js';
@@ -16,7 +16,8 @@ const USAGE = `Usage: aep-conformance [options] [-- <host command...>]
 
 Runs the AEP conformance suite. Without a host command the reference engine runs in-process.
 Everything after "--" is the host command; the suite appends the launcher flags
-(--transport, --fixture, --session-config, --import-root, --executors) itself.
+(--transport, --fixture, --session-config, --import-root, --executors) itself, plus
+--data-dir <dir> for the durability level.
 
 Options:
   --json               machine-readable report on stdout
@@ -25,6 +26,9 @@ Options:
   --concurrency <n>    tests in parallel, each with its own host (default 4)
   --timeout <ms>       per-test timeout (default 60000)
   --no-multi-session   skip tests that need more than one session (single-session hosts)
+  --no-restart         never pass --data-dir or restart the host: skips the durability level
+                       (otherwise it runs when the host starts with --data-dir and reports
+                       host.durability: durable)
   --list               list the tests and exit
   --help               this text
 
@@ -46,6 +50,7 @@ async function main(): Promise<number> {
         concurrency: { type: 'string' },
         timeout: { type: 'string' },
         'no-multi-session': { type: 'boolean', default: false },
+        'no-restart': { type: 'boolean', default: false },
         list: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -93,7 +98,10 @@ async function main(): Promise<number> {
 
   const [command, ...args] = hostCmd;
   const launcher = command
-    ? new ProcessLauncher(command, args, { multiSession: !values['no-multi-session'] })
+    ? new ProcessLauncher(command, args, {
+        multiSession: !values['no-multi-session'],
+        restart: !values['no-restart'],
+      })
     : new InProcessLauncher();
 
   const onResult = values.json

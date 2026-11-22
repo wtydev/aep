@@ -52,6 +52,8 @@ beforeAll(() => {
   );
   symlinkSync(join(outside, 'secret.wav'), join(inbox, 'link.wav'));
   symlinkSync(outside, join(inbox, 'linkdir'));
+  symlinkSync(join(inbox, 'take.wav'), join(inbox, 'inside-link.wav'));
+  symlinkSync(join(inbox, 'sub'), join(inbox, 'subdir-link'));
 });
 
 afterAll(() => {
@@ -115,6 +117,15 @@ describe('DoD 8: assets', () => {
     expect(output(await f.admin.call('asset.list', { store: true })).assets).toEqual([]);
   });
 
+  it('rejects a final-component symlink even when it points inside the root; symlinked directories are fine', async () => {
+    const f = fixture();
+    const r = await f.admin.call('asset.import', { path: 'inside-link.wav' });
+    expect(errorCode(r)).toBe('path_rejected');
+    expect(
+      output(await f.admin.call('asset.import', { path: 'subdir-link/deep.wav' })).asset.name,
+    ).toBe('deep.wav');
+  });
+
   it('rejects an unknown root with path_rejected', async () => {
     const f = fixture();
     const r = await f.admin.call('asset.import', { path: 'take.wav', root: 'elsewhere' });
@@ -158,7 +169,7 @@ describe('DoD 8: assets', () => {
         type: 'audio',
         name: 'New',
         start: 8,
-        duration: 4,
+        duration: 2, // 1 s at 120 bpm: must not read past the asset's duration
         timebase: 'beats',
         assetId: asset.id,
         sourceOffset: 0,

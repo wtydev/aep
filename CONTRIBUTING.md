@@ -15,18 +15,18 @@ pnpm build
 
 ## Commands
 
-| Command                  | Purpose                                               |
-| ------------------------ | ----------------------------------------------------- |
-| `pnpm build`             | Compile all packages (`tsc -b`)                       |
-| `pnpm test`              | Run the vitest suite                                  |
-| `pnpm run lint`          | ESLint                                                |
-| `pnpm run format`        | Prettier write                                        |
-| `pnpm run format:check`  | Prettier check (CI)                                   |
-| `pnpm run typecheck`     | TypeScript project + solution check                   |
-| `pnpm schemas`           | Regenerate `schemas/*.schema.json` from `@aep/schema` |
-| `pnpm run schemas:check` | Verify `schemas/` is up to date (CI)                  |
-| `pnpm run conformance`   | Build and run the conformance suite                   |
-| `pnpm run check`         | typecheck + lint + format:check + test                |
+| Command                  | Purpose                                                       |
+| ------------------------ | ------------------------------------------------------------- |
+| `pnpm build`             | Compile all packages (`tsc -b`)                               |
+| `pnpm test`              | Run the vitest suite                                          |
+| `pnpm run lint`          | ESLint                                                        |
+| `pnpm run format`        | Prettier write                                                |
+| `pnpm run format:check`  | Prettier check (CI)                                           |
+| `pnpm run typecheck`     | TypeScript project + solution check                           |
+| `pnpm schemas`           | Regenerate `schemas/*.schema.json` from `@wty.dev/aep-schema` |
+| `pnpm run schemas:check` | Verify `schemas/` is up to date (CI)                          |
+| `pnpm run conformance`   | Build and run the conformance suite                           |
+| `pnpm run check`         | typecheck + lint + format:check + test                        |
 
 ## Rules
 
@@ -46,3 +46,16 @@ pnpm build
   not required.
 - **Conventional commit messages.** Use `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`,
   `test:`, etc., with a short imperative subject.
+
+## Releasing
+
+Releases are cut by tag; the `release` workflow (`.github/workflows/release.yml`) does the rest.
+
+1. Bump `version` in every `package.json` (root, `packages/*`, `examples/*`) to `X.Y.Z`.
+2. Move the `Unreleased` entries in `CHANGELOG.md` under `## [X.Y.Z] - <date>`.
+3. Commit, then `git tag vX.Y.Z` and push the tag.
+4. The workflow verifies the tag matches the package versions, runs the full check suite, and
+   publishes every public `@wty.dev/aep-*` package to npm with provenance, then creates a GitHub release.
+
+Publishing requires the `NPM_TOKEN` repository secret (an npm access token allowed to publish
+the `@wty.dev` org) and `id-token: write` for provenance attestations.

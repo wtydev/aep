@@ -1,5 +1,6 @@
 import { constants as fsConstants } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import type { FileHandle } from 'node:fs/promises';
 import {
   AepError,
@@ -17,8 +18,8 @@ import {
   resolveInsideRoot,
   sha256Hex,
   SUPPORTED_PROTOCOL_VERSIONS,
-} from '@aep/core';
-import type { EntityMap } from '@aep/core';
+} from '@wty.dev/aep-core';
+import type { EntityMap, LedgerSnapshot } from '@wty.dev/aep-core';
 import {
   ACTION_CAPABILITY,
   ACTION_NAMES,
@@ -41,7 +42,7 @@ import {
   SCHEMA_VERSION,
   secondsToBeats,
   TrackKind,
-} from '@aep/schema';
+} from '@wty.dev/aep-schema';
 import type {
   ActionName,
   CapabilitiesOutput,
@@ -59,8 +60,8 @@ import type {
   RenderRequestParams,
   ResultStatus,
   Transaction,
-} from '@aep/schema';
-import type { Project as ProjectT, Scope as ScopeT } from '@aep/schema';
+} from '@wty.dev/aep-schema';
+import type { Project as ProjectT, Scope as ScopeT } from '@wty.dev/aep-schema';
 import {
   checkScope,
   createdRemoved,
@@ -71,9 +72,12 @@ import {
 } from '../domain/index.js';
 import type { ApplyContext } from '../domain/index.js';
 import { AssetStore, IMPORTABLE_MEDIA_TYPES, mediaTypeFromName } from './assets.js';
-import type { RequestHandler } from './request-handler.js';
+import type { RequestHandler } from '@wty.dev/aep-core';
 import { JobManager } from './jobs.js';
 import type { JobExecutor, JobInput } from './jobs.js';
+import { PersistenceError, StateFiles, STATE_FORMAT_VERSION } from './persistence.js';
+import { assetBlobName, parsePersistedState } from './state.js';
+import type { PersistedHistory, PersistedRequestRecord, PersistedState, Role } from './state.js';
 
 export const DEFAULT_LIMITS: Limits = {
   maxOperationsPerTransaction: 1000,
@@ -84,14 +88,12 @@ export const DEFAULT_LIMITS: Limits = {
   receiptRetention: 1000,
 };
 
-export const DEFAULT_HOST_INFO = { name: 'aep-reference-host', version: '0.1.0' } as const;
+export const DEFAULT_HOST_INFO = { name: 'aep-reference-host', version: '1.0.0' } as const;
 const DEFAULT_SESSION_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_MAX_ASSET_BYTES = 64 * 1024 * 1024;
 const MAX_DIAGNOSTICS = 200;
 const ABSENT_CREDENTIAL_HASH = sha256Hex('');
 const GENERIC_INTERNAL = 'internal error while processing the request';
-
-type Role = 'read' | 'propose' | 'edit' | 'admin';
 
 export interface AepHostOptions {
   project: ProjectInput;
@@ -114,6 +116,12 @@ export interface AepHostOptions {
   assertResults?: boolean;
   /** Called with the real error behind an `internal_error` result (never sent to clients). */
   onInternalError?: (error: unknown, request: { action: string; id: string }) => void;
+}
+
+/** Options for {@link AepHost.open}: a durable host whose state lives under `dataDir`. */
+export interface DurableHostOptions extends AepHostOptions {
+  /** Absolute directory for durable state (created with mode 0700). */
+  dataDir: string;
 }
 
 export interface CreateSessionOptions {
@@ -175,6 +183,12 @@ interface RequestRecord {
 
 interface Outcome {
   output: unknown;
+  /** Reverses an effect that lives outside the checkpointed state (asset store, job table). */
+  undo?: () => void;
+  /** The effect cannot be reversed (`job.cancel`); a failed persist then yields `outcome_uncertain`. */
+  irreversible?: boolean;
+  /** Runs once the effect is kept (persisted, or kept as `outcome_uncertain`): starts jobs. */
+  afterCommit?: () => void;
   /** Revision for the result; default: the current revision. */
   revision?: string;
   diagnostics?: Diagnostic[];
@@ -208,15 +222,55 @@ function clampDiagnostics(diags: readonly Diagnostic[]): Diagnostic[] {
     .map((d) => ({ ...d, message: clampMessage(d.message) || d.code }));
 }
 
+/** In-memory state a durable write can be rolled back to. See `AepHost.checkpoint`. */
+interface Checkpoint {
+  current: Snapshot;
+  revisionCounter: number;
+  history: { rec: HistoryRecord; entry: HistoryEntry }[];
+  proposals: {
+    id: string;
+    rec: ProposalRecord;
+    proposal: Proposal;
+    proposed: ProjectT | undefined;
+  }[];
+  ledger: LedgerSnapshot;
+  records: Map<string, Map<string, RequestRecord>>;
+}
+
+const reservationKey = (session: string, id: string): string => JSON.stringify([session, id]);
+
 const jsonPath = (path: readonly PropertyKey[]): string =>
   path.length === 0
     ? '/'
     : '/' + path.map((p) => String(p).replace(/~/g, '~0').replace(/\//g, '~1')).join('/');
 
+/** Hands `AepHost.open`'s storage to the constructor without making it a public parameter. */
+const openingFiles = new WeakMap<AepHostOptions, StateFiles>();
+
 /**
  * Reference AEP host engine: sessions, transactions, proposals, history, assets and jobs over
- * one in-memory project. Implements the host side of MEP Core 1 (`RequestHandler`). Every
- * commit is a single reference swap, so a request that fails can never leave partial state.
+ * one project. Implements the host side of the AEP envelope (`RequestHandler`). Every commit is
+ * a single reference swap, so a request that fails can never leave partial state.
+ *
+ * Volatile by default (`new AepHost(...)`: everything in memory, `host.durability` is
+ * `volatile`). `AepHost.open({ dataDir })` makes it durable: see "Durability" below.
+ *
+ * Durability. State is persisted as one JSON file plus content-addressed asset blobs (see
+ * `persistence.ts`, `state.ts`). In durable mode every request runs under one mutex, so no
+ * request observes another's half-finished work, and:
+ *  - write-ahead: a `write` request the ledger reports as new is reserved on disk BEFORE any
+ *    effect runs; the final state (project, history, receipt, ledger result) is on disk BEFORE
+ *    the result is returned;
+ *  - a reservation found without a result after a restart becomes an `outcome_uncertain`
+ *    (indeterminate) result, so a retry never re-executes;
+ *  - persistence failure policy: the effect is applied to memory first and rolled back from a
+ *    checkpoint if the final write fails (equivalent to "persist, then swap", because requests
+ *    are serialized and reads wait their turn). If the new state file cannot have reached disk,
+ *    the request is rolled back and reported as `internal_error` (failed, retryable). If it may
+ *    have (the directory sync after the rename failed) or the effect cannot be reversed
+ *    (`job.cancel`), memory keeps the effect and the result is `outcome_uncertain`; the next
+ *    successful write rewrites the whole state, resolving the ambiguity.
+ * One host process must own a data directory; there is no cross-process lock.
  */
 export class AepHost implements RequestHandler {
   readonly limits: Limits;
@@ -231,6 +285,7 @@ export class AepHost implements RequestHandler {
   private readonly importRoots = new Map<string, string>();
   private readonly executors: JobExecutor[];
   private readonly retention: number;
+  private readonly persistence?: StateFiles;
 
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly ledger: RequestLedger;
@@ -241,10 +296,32 @@ export class AepHost implements RequestHandler {
   private readonly history: HistoryRecord[] = [];
   private readonly applyCtx: ApplyContext;
 
+  /** Open reservations: action names, so `receipt.get` can describe an interrupted request. */
+  private readonly reservations = new Map<
+    string,
+    { session: string; id: string; action: string }
+  >();
+  private requestChain: Promise<unknown> = Promise.resolve();
+  private dirtyVersion = 0;
+  private persistedVersion = 0;
+
   private current: Snapshot;
+  /** Set while a durable write's effect is applied in memory but not yet persisted. */
+  private tentative: Snapshot | undefined;
+  /** Storage failed in a way that left disk and memory disagreeing: refuse all requests. */
+  private storageBroken = false;
   private revisionCounter = 0;
 
+  /** Creates a volatile host. For a durable one use {@link AepHost.open}. */
   constructor(options: AepHostOptions) {
+    const persistence = openingFiles.get(options);
+    openingFiles.delete(options);
+    this.persistence = persistence;
+    if ('dataDir' in options && persistence === undefined) {
+      throw new TypeError(
+        'AepHost: the constructor creates volatile hosts only; use `await AepHost.open({ dataDir, ... })` for a durable host',
+      );
+    }
     this.limits = Limits.parse({ ...DEFAULT_LIMITS, ...options.limits });
     this.hostInfo = options.hostInfo ?? { ...DEFAULT_HOST_INFO };
     this.clock = options.clock ?? Date.now;
@@ -257,7 +334,11 @@ export class AepHost implements RequestHandler {
     for (const [name, dir] of Object.entries(options.importRoots ?? {}))
       this.importRoots.set(name, dir);
     this.ledger = new RequestLedger({ retention: this.retention });
-    this.jobs = new JobManager({ assets: this.assets, clock: this.clock });
+    this.jobs = new JobManager({
+      assets: this.assets,
+      clock: this.clock,
+      onSettled: () => this.schedulePersist(),
+    });
 
     // Check invariants (including id uniqueness) before flattening: flattening keys entities by
     // id, so a duplicate id would otherwise be dropped silently.
@@ -276,17 +357,70 @@ export class AepHost implements RequestHandler {
     };
   }
 
+  /**
+   * Open a durable host over `options.dataDir` (an absolute path, created with mode 0700).
+   * If `<dataDir>/host-state.json` exists the host is restored from it and `options.project`
+   * is ignored; otherwise it starts from `options.project` and persists immediately. Throws on
+   * an unknown `formatVersion`, a malformed file, or asset bytes that do not match their hash.
+   */
+  static async open(options: DurableHostOptions): Promise<AepHost> {
+    const { dataDir, ...rest } = options;
+    if (!isAbsolute(dataDir)) throw new RangeError('dataDir must be an absolute path');
+    const files = await StateFiles.open(dataDir);
+    const construct = (project: AepHostOptions['project']): AepHost => {
+      const opts: AepHostOptions = { ...rest, project };
+      openingFiles.set(opts, files);
+      return new AepHost(opts);
+    };
+    const raw = await files.readState();
+    if (raw === undefined) {
+      const host = construct(options.project);
+      host.markDirty();
+      await host.persistNow();
+      return host;
+    }
+    const state = parsePersistedState(raw);
+    const blobs = new Map<string, Uint8Array>();
+    for (const asset of state.assets) {
+      const name = assetBlobName(asset);
+      if (!blobs.has(name)) blobs.set(name, await files.readBlob(name));
+    }
+    const host = construct(state.project);
+    if (host.loadState(state, blobs)) {
+      host.markDirty();
+      await host.persistNow();
+    }
+    return host;
+  }
+
+  /** Resolves once every state change made so far is on disk. Rejects if writing fails. No-op when volatile. */
+  async flush(): Promise<void> {
+    if (!this.persistence) return;
+    await this.exclusive(() => this.persistIfDirty());
+  }
+
   // ---------------------------------------------------------------- public surface
 
   get projectId(): string {
     return this.current.project.id;
   }
 
+  /** Accepted revision. While a durable write awaits its final persist, the previous one. */
   get revision(): string {
-    return this.current.revision;
+    return this.committed.revision;
   }
 
-  /** Out-of-band session creation (design §6). The credential is returned exactly once. */
+  /** The state clients may observe: excludes the effect of a write that is not yet durable. */
+  private get committed(): Snapshot {
+    return this.tentative ?? this.current;
+  }
+
+  /**
+   * Out-of-band session creation (design §6). The credential is returned exactly once.
+   *
+   * On a durable host the session is written in the background; `await host.flush()` before
+   * handing the credential out (or before a crash can matter) to know it is on disk.
+   */
   createSession(opts: CreateSessionOptions): SessionGrant {
     if (opts.client.length === 0 || opts.client.length > 128) {
       throw new RangeError('client name must be 1..128 characters');
@@ -295,6 +429,12 @@ export class AepHost implements RequestHandler {
     for (const a of opts.allowedActions ?? []) {
       if (!Object.hasOwn(ACTIONS, a))
         throw new RangeError(`unknown action '${a}' in allowedActions`);
+    }
+    if (
+      opts.expiresAt !== undefined &&
+      (!Number.isSafeInteger(opts.expiresAt) || opts.expiresAt < 0)
+    ) {
+      throw new RangeError('expiresAt must be a non-negative integer (epoch milliseconds)');
     }
     const id = generateId('sess');
     const credential = generateCredential();
@@ -308,13 +448,16 @@ export class AepHost implements RequestHandler {
       revoked: false,
       credentialHash: sha256Hex(credential),
     });
+    this.schedulePersist();
     return { session: id, credential, workspace: this.projectId };
   }
 
+  /** Revoke a session now (in memory); on a durable host it is on disk only after `await host.flush()`. */
   revokeSession(sessionId: string): void {
     const s = this.sessions.get(sessionId);
     if (!s) throw new AepError('not_authorized', 'unknown session');
     s.revoked = true;
+    this.schedulePersist();
   }
 
   /** Session manifest listing only the actions that session may use. */
@@ -344,8 +487,8 @@ export class AepHost implements RequestHandler {
       protocol: CORE_PROTOCOL,
       session: s.id,
       workspace: this.projectId,
-      revision: this.current.revision,
-      data: structuredClone(this.current.project),
+      revision: this.committed.revision,
+      data: structuredClone(this.committed.project),
     };
   }
 
@@ -363,13 +506,33 @@ export class AepHost implements RequestHandler {
   }
 
   /** Resolves when all queued/running jobs have reached a terminal state. */
-  waitForJobs(): Promise<void> {
-    return this.jobs.idle();
+  async waitForJobs(): Promise<void> {
+    await this.jobs.idle();
+    await this.flush();
   }
 
   // ---------------------------------------------------------------- request pipeline (design §1)
 
-  async handle(raw: unknown): Promise<CoreResult> {
+  handle(raw: unknown): Promise<CoreResult> {
+    return this.persistence ? this.exclusive(() => this.handleCore(raw)) : this.handleCore(raw);
+  }
+
+  private async handleCore(raw: unknown): Promise<CoreResult> {
+    if (this.storageBroken) {
+      const r = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
+      return this.failure(
+        {
+          session: sanitizeRequestId(r['session']),
+          workspace: sanitizeRequestId(r['workspace']),
+          id: sanitizeRequestId(r['id']),
+        },
+        new AepError(
+          'internal_error',
+          'host storage failed; the host must be restarted before it can serve requests',
+        ),
+        undefined,
+      );
+    }
     // 1. envelope
     const parsed = CoreRequest.safeParse(raw);
     if (!parsed.success) {
@@ -382,7 +545,7 @@ export class AepHost implements RequestHandler {
           workspace: sanitizeRequestId(r['workspace']),
           id: sanitizeRequestId(r['id']),
         },
-        new AepError('bad_request', `request is not a valid MEP Core 1 request${where}`),
+        new AepError('bad_request', `not a valid AEP request${where}`),
         undefined,
       );
     }
@@ -398,7 +561,17 @@ export class AepHost implements RequestHandler {
 
     // 5. ledger
     const begin = this.ledger.begin(req.session, req.id, requestFingerprint(req));
-    if (begin.kind === 'replay') return structuredClone(begin.result);
+    if (begin.kind === 'replay') {
+      // The ledger just moved this id to most-recent; keep the receipt index in the same order so
+      // both evict the same request.
+      const perSession = this.records.get(req.session);
+      const rec = perSession?.get(req.id);
+      if (perSession && rec) {
+        perSession.delete(req.id);
+        perSession.set(req.id, rec);
+      }
+      return structuredClone(begin.result);
+    }
     if (begin.kind === 'pending') {
       return this.failure(
         req,
@@ -417,11 +590,32 @@ export class AepHost implements RequestHandler {
       );
     }
 
+    // 5b. durable: reserve before any effect (write-ahead)
+    const durable = this.persistence !== undefined;
+    const isWrite = ACTIONS[req.action as ActionName].effect === 'write';
+    const key = reservationKey(req.session, req.id);
+    if (durable && isWrite) {
+      this.reservations.set(key, { session: req.session, id: req.id, action: req.action });
+      this.markDirty();
+      try {
+        await this.persistNow();
+      } catch (e) {
+        // Nothing ran. Forget the reservation so a retry executes as a new request.
+        this.reservations.delete(key);
+        this.ledger.abandon(req.session, req.id);
+        this.reportInternal(e, req);
+        return this.persistFailure(req);
+      }
+    }
+    const checkpoint = durable && isWrite ? this.checkpoint() : undefined;
+    if (checkpoint) this.tentative = checkpoint.current;
+
     // 6-8. params, base revision, execute
     let result: CoreResult;
     let record: RequestRecord;
+    let outcome: Outcome | undefined;
     try {
-      const outcome = await this.run(session, req);
+      outcome = await this.run(session, req);
       result = {
         protocol: CORE_PROTOCOL,
         session: req.session,
@@ -448,8 +642,303 @@ export class AepHost implements RequestHandler {
       };
     }
 
-    // 9. store
-    return this.finalize(req, result, record);
+    // 9. store, then (durable writes) make the final state durable before answering
+    let final: CoreResult;
+    try {
+      final = this.finalize(req, result, record);
+    } catch (problem) {
+      this.tentative = undefined;
+      if (durable) await this.persistNow().catch(() => undefined);
+      throw problem;
+    }
+    if (checkpoint) {
+      try {
+        await this.persistNow();
+      } catch (e) {
+        this.reportInternal(e, req);
+        // A rejected action may still have changed state before it threw (proposal.accept marks
+        // a conflicting proposal stale), so rejections are rolled back like successes.
+        return await this.afterFailedPersist(req, e, checkpoint, outcome, record);
+      } finally {
+        this.tentative = undefined;
+      }
+    }
+    outcome?.afterCommit?.();
+    return final;
+  }
+
+  // ---------------------------------------------------------------- durability
+
+  /** Run `fn` after every earlier exclusive task. Used for all requests of a durable host. */
+  private exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.requestChain.then(fn);
+    this.requestChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private markDirty(): void {
+    this.dirtyVersion += 1;
+  }
+
+  /** Mark dirty and write in the background (sessions, job completion). `flush()` surfaces errors. */
+  private schedulePersist(): void {
+    this.markDirty();
+    if (!this.persistence) return;
+    this.exclusive(() => this.persistIfDirty()).catch((e: unknown) => {
+      this.reportInternal(e, { action: 'host.persist', id: 'background' });
+    });
+  }
+
+  private async persistIfDirty(): Promise<void> {
+    if (this.dirtyVersion !== this.persistedVersion) await this.persistNow();
+  }
+
+  /**
+   * Write the whole current state. Callers hold the request mutex (`exclusive`), or run before
+   * the host is handed out (`open`), so two writes never interleave.
+   */
+  private async persistNow(): Promise<void> {
+    const files = this.persistence;
+    if (!files) return;
+    const version = this.dirtyVersion;
+    const { state, blobs } = this.serializeState();
+    await files.write(state, blobs);
+    this.persistedVersion = version;
+  }
+
+  /** Hand the real error behind an `internal_error` to `onInternalError`; never throws. */
+  private reportInternal(e: unknown, req: { action: string; id: string }): void {
+    try {
+      this.onInternalError?.(e, { action: req.action, id: req.id });
+    } catch {
+      // a faulty logging hook must not change the outcome
+    }
+  }
+
+  /** Result for a request that could not be reserved: nothing ran, nothing is recorded. */
+  private persistFailure(req: CoreRequest): CoreResult {
+    return this.failure(
+      req,
+      new AepError(
+        'internal_error',
+        'host state could not be persisted; the request was not applied',
+        [{ code: 'internal_error', message: 'host state could not be persisted' }],
+      ),
+      this.current.revision,
+    );
+  }
+
+  /**
+   * The final state of a succeeded write could not be persisted. If it cannot have reached disk
+   * and the effect is reversible, undo it and report `internal_error` (retryable). Otherwise keep
+   * the effect, record `outcome_uncertain` in its place and let the next write resolve the doubt.
+   */
+  private async afterFailedPersist(
+    req: CoreRequest,
+    e: unknown,
+    cp: Checkpoint,
+    outcome: Outcome | undefined,
+    record: RequestRecord,
+  ): Promise<CoreResult> {
+    this.markDirty();
+    const mayBeOnDisk = e instanceof PersistenceError && e.committed;
+    this.rollbackBookkeeping(cp);
+    if (!mayBeOnDisk && !outcome?.irreversible) {
+      this.rollbackState(cp);
+      outcome?.undo?.();
+      this.ledger.abandon(req.session, req.id);
+      this.reservations.delete(reservationKey(req.session, req.id));
+      return this.persistFailure(req);
+    }
+    const err = new AepError(
+      'outcome_uncertain',
+      `request '${req.id}' may have been applied but could not be made durable; reconcile with receipt.get or project.inspect`,
+    );
+    const uncertain = this.failure(req, err, this.current.revision);
+    this.store(req, uncertain, {
+      action: req.action,
+      status: 'indeterminate',
+      errorCode: err.code,
+      diagnostics: clampDiagnostics(this.diagnosticsOf(err)),
+      ...(record.receipt ? { receipt: record.receipt } : {}),
+    });
+    outcome?.afterCommit?.();
+    if (mayBeOnDisk) {
+      // The renamed state file (with the original result) may survive a crash. Replace it with
+      // the uncertain one so a replay after restart gives the same answer; if that fails too,
+      // disk and memory may disagree, so stop serving until the host is restarted.
+      try {
+        await this.persistNow();
+      } catch (again) {
+        this.storageBroken = true;
+        this.reportInternal(again, req);
+      }
+    }
+    return structuredClone(uncertain);
+  }
+
+  /** Capture what `rollbackState` / `rollbackBookkeeping` need. Taken after the reservation is written. */
+  private checkpoint(): Checkpoint {
+    return {
+      current: this.current,
+      revisionCounter: this.revisionCounter,
+      history: this.history.map((rec) => ({ rec, entry: { ...rec.entry } })),
+      proposals: [...this.proposals].map(([id, rec]) => ({
+        id,
+        rec,
+        proposal: rec.proposal,
+        proposed: rec.proposed,
+      })),
+      ledger: this.ledger.snapshot(),
+      records: new Map([...this.records].map(([session, m]) => [session, new Map(m)])),
+    };
+  }
+
+  /** Restore the ledger and request records (the request is pending again). */
+  private rollbackBookkeeping(cp: Checkpoint): void {
+    this.ledger.restore(cp.ledger);
+    this.records.clear();
+    for (const [session, m] of cp.records) this.records.set(session, new Map(m));
+  }
+
+  /** Restore project, revision, history and proposals. */
+  private rollbackState(cp: Checkpoint): void {
+    this.current = cp.current;
+    this.revisionCounter = cp.revisionCounter;
+    this.history.length = 0;
+    for (const h of cp.history) {
+      h.rec.entry = h.entry;
+      this.history.push(h.rec);
+    }
+    this.proposals.clear();
+    for (const p of cp.proposals) {
+      p.rec.proposal = p.proposal;
+      if (p.proposed) p.rec.proposed = p.proposed;
+      else delete p.rec.proposed;
+      this.proposals.set(p.id, p.rec);
+    }
+  }
+
+  private serializeState(): { state: PersistedState; blobs: [string, Uint8Array][] } {
+    const index = new Map<HistoryRecord, number>();
+    this.history.forEach((h, i) => index.set(h, i));
+    const history: PersistedHistory[] = this.history.map((h) => {
+      const target = h.target === undefined ? undefined : index.get(h.target);
+      return {
+        entry: h.entry,
+        changes: h.changes,
+        sessionId: h.sessionId,
+        ...(target !== undefined ? { target } : {}),
+      };
+    });
+    const assets = this.assets.entries();
+    const state: PersistedState = {
+      formatVersion: STATE_FORMAT_VERSION,
+      project: this.current.project,
+      revision: this.current.revision,
+      revisionCounter: this.revisionCounter,
+      sessions: [...this.sessions.values()].map((s) => ({
+        id: s.id,
+        client: s.client,
+        role: s.role,
+        ...(s.scope ? { scope: s.scope } : {}),
+        ...(s.allowedActions ? { allowedActions: [...s.allowedActions] } : {}),
+        expiresAt: s.expiresAt,
+        revoked: s.revoked,
+        credentialHash: s.credentialHash,
+      })),
+      ledger: this.ledger.snapshot(),
+      reservations: [...this.reservations.values()],
+      records: [...this.records].map(([session, m]) => ({
+        session,
+        records: [...m].map(([id, r]): { id: string; record: PersistedRequestRecord } => ({
+          id,
+          record: r,
+        })),
+      })),
+      history,
+      proposals: [...this.proposals.values()].map((p) => ({
+        proposal: p.proposal,
+        ...(p.proposed ? { proposed: p.proposed } : {}),
+        ...(p.proposerScope ? { proposerScope: p.proposerScope } : {}),
+      })),
+      assets: assets.map((a) => a.asset),
+      jobs: this.jobs.list(),
+    };
+    return {
+      state,
+      blobs: assets.map((a): [string, Uint8Array] => [assetBlobName(a.asset), a.bytes]),
+    };
+  }
+
+  /**
+   * Load restored state into this freshly constructed host. Returns true when the restore itself
+   * changed something that must be written back (reservations and jobs that were interrupted).
+   */
+  private loadState(state: PersistedState, blobs: Map<string, Uint8Array>): boolean {
+    // The constructor already parsed, checked and flattened `state.project`.
+    this.current = { ...this.current, revision: state.revision };
+    this.revisionCounter = state.revisionCounter;
+    for (const s of state.sessions) {
+      this.sessions.set(s.id, {
+        id: s.id,
+        client: s.client,
+        role: s.role,
+        ...(s.scope ? { scope: s.scope } : {}),
+        ...(s.allowedActions ? { allowedActions: new Set(s.allowedActions) } : {}),
+        expiresAt: s.expiresAt,
+        revoked: s.revoked,
+        credentialHash: s.credentialHash,
+      });
+    }
+    this.ledger.restore(state.ledger);
+    for (const { session, records } of state.records) {
+      this.records.set(session, new Map(records.map((r) => [r.id, r.record])));
+    }
+    const restored = state.history.map((h): HistoryRecord => ({
+      entry: h.entry,
+      changes: h.changes,
+      sessionId: h.sessionId,
+    }));
+    state.history.forEach((h, i) => {
+      if (h.target !== undefined) restored[i]!.target = restored[h.target];
+    });
+    this.history.push(...restored);
+    for (const p of state.proposals) {
+      this.proposals.set(p.proposal.id, {
+        proposal: p.proposal,
+        ...(p.proposed ? { proposed: p.proposed } : {}),
+        ...(p.proposerScope ? { proposerScope: p.proposerScope } : {}),
+      });
+    }
+    for (const asset of state.assets) this.assets.restore(asset, blobs.get(assetBlobName(asset))!);
+    let changed = this.jobs.restore(state.jobs);
+
+    // A reservation without a result: the effect may or may not have happened.
+    const actions = new Map(
+      state.reservations.map((r) => [reservationKey(r.session, r.id), r.action]),
+    );
+    for (const { session, id } of this.ledger.pendingIds()) {
+      const action = actions.get(reservationKey(session, id)) ?? 'unknown';
+      const err = new AepError(
+        'outcome_uncertain',
+        `the host stopped while processing request '${id}'; it may or may not have been applied`,
+      );
+      const result = this.failure(
+        { session, workspace: this.projectId, id },
+        err,
+        this.current.revision,
+      );
+      this.ledger.complete(session, id, result);
+      this.recordsFor(session).set(id, {
+        action,
+        status: 'indeterminate',
+        errorCode: err.code,
+        diagnostics: [{ code: err.code, message: err.message }],
+      });
+      changed = true;
+    }
+    return changed;
   }
 
   // ---------------------------------------------------------------- pipeline helpers
@@ -605,7 +1094,7 @@ export class AepHost implements RequestHandler {
         return { output: { job } };
       }
       case 'job.cancel':
-        return { output: { job: this.jobs.cancel(params.jobId as string) } };
+        return { output: { job: this.jobs.cancel(params.jobId as string) }, irreversible: true };
       default: {
         const unreachable: never = action;
         throw new Error(`unhandled action ${String(unreachable)}`);
@@ -615,11 +1104,7 @@ export class AepHost implements RequestHandler {
 
   private toAepError(e: unknown, req: CoreRequest): AepError {
     if (isAepError(e) && e.code !== 'internal_error') return e;
-    try {
-      this.onInternalError?.(e, { action: req.action, id: req.id });
-    } catch {
-      // a faulty logging hook must not change the outcome
-    }
+    this.reportInternal(e, req);
     return new AepError('internal_error', GENERIC_INTERNAL, [
       { code: 'internal_error', message: GENERIC_INTERNAL },
     ]);
@@ -667,13 +1152,17 @@ export class AepHost implements RequestHandler {
     return structuredClone(result);
   }
 
+  private recordsFor(session: string): Map<string, RequestRecord> {
+    let m = this.records.get(session);
+    if (!m) this.records.set(session, (m = new Map()));
+    return m;
+  }
+
   private store(req: CoreRequest, result: CoreResult, record: RequestRecord): void {
+    this.markDirty();
+    this.reservations.delete(reservationKey(req.session, req.id));
     this.ledger.complete(req.session, req.id, result);
-    let perSession = this.records.get(req.session);
-    if (!perSession) {
-      perSession = new Map();
-      this.records.set(req.session, perSession);
-    }
+    const perSession = this.recordsFor(req.session);
     perSession.set(req.id, record);
     while (perSession.size > this.retention) {
       const oldest = perSession.keys().next().value;
@@ -888,7 +1377,7 @@ export class AepHost implements RequestHandler {
         supportedVersions: [...SUPPORTED_PROTOCOL_VERSIONS],
         schemaVersion: SCHEMA_VERSION,
       },
-      host: { ...this.hostInfo },
+      host: { ...this.hostInfo, durability: this.persistence ? 'durable' : 'volatile' },
       capabilities,
       operations: OPERATION_NAMES.filter((o) => this.capabilities.has(OPERATION_CAPABILITY[o])),
       trackKinds: [...TrackKind.options],
@@ -1298,7 +1787,7 @@ export class AepHost implements RequestHandler {
         throw e;
       }
     };
-    const real = await resolve();
+    await resolve(); // confinement: traversal or a symlink escape is path_rejected
     const name = params.path.slice(params.path.lastIndexOf('/') + 1);
     const mediaType = params.mediaType ?? mediaTypeFromName(name);
     if (mediaType === undefined || !IMPORTABLE_MEDIA_TYPES.has(mediaType)) {
@@ -1317,12 +1806,16 @@ export class AepHost implements RequestHandler {
         `file exceeds the import limit of ${this.maxAssetBytes} bytes`,
       );
     };
-    // Open without following a final symlink, then confirm the opened inode is still the file
-    // the root-confined path resolves to. This closes the window in which the tree could be
-    // swapped between the confinement check and the open.
+    // Open the requested path itself without following its final component (§14: a symlink leaf
+    // is `path_rejected`; symlinked directories are fine once confined), then confirm the opened
+    // inode is the file the root-confined path resolves to. This also closes the window in which
+    // the tree could be swapped between the confinement check and the open.
     let handle: FileHandle;
     try {
-      handle = await open(real, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      handle = await open(
+        join(rootDir, params.path),
+        fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+      );
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
       if (code === 'ENOENT') {
@@ -1331,7 +1824,9 @@ export class AepHost implements RequestHandler {
           `no file at '${params.path}' in root '${params.root}'`,
         );
       }
-      if (code === 'ELOOP') throw new AepError('path_rejected', 'path changed during import');
+      if (code === 'ELOOP') {
+        throw new AepError('path_rejected', 'the final path component is a symbolic link');
+      }
       throw e;
     }
     let bytes: Buffer;
@@ -1367,7 +1862,7 @@ export class AepHost implements RequestHandler {
       name,
       mediaType,
     });
-    return { output: { asset } };
+    return { output: { asset }, undo: () => this.assets.delete(asset.id) };
   }
 
   // ---------------------------------------------------------------- jobs (design §10)
@@ -1392,13 +1887,21 @@ export class AepHost implements RequestHandler {
   ): Outcome {
     const problems = executor.validate?.(input) ?? [];
     if (problems.length > 0) {
-      throw new AepError(
-        'invalid_params',
-        `invalid ${input.kind} parameters: ${problems[0]!.message}`,
-        problems,
-      );
+      // Executor messages may carry host paths or internals (SPECIFICATION §14): pass only the
+      // code and the parameter path through, like job errors.
+      const safe = problems.slice(0, MAX_DIAGNOSTICS).map((p): Diagnostic => ({
+        code: p.code,
+        message: `invalid ${input.kind} parameter${p.path ? ` at ${p.path}` : ''}`,
+        ...(p.path !== undefined ? { path: p.path } : {}),
+      }));
+      throw new AepError('invalid_params', `invalid ${input.kind} parameters`, safe);
     }
-    return { output: { job: this.jobs.create({ executor, input, request }) } };
+    const job = this.jobs.create({ executor, input, request });
+    return {
+      output: { job },
+      undo: () => this.jobs.discard(job.id),
+      afterCommit: () => this.jobs.start(job.id),
+    };
   }
 
   private requestRender(params: RenderRequestParams): Outcome {

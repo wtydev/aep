@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 /** AEP protocol version implemented by this schema package. */
-export const PROTOCOL_VERSION = '0.1' as const;
-/** Schema version (semver). Bumps on any schema change; major tracks protocol major before 1.0. */
-export const SCHEMA_VERSION = '0.1.0' as const;
+export const PROTOCOL_VERSION = '1.0' as const;
+/** Schema version (semver). Major equals the protocol major; minor/patch bump on additive changes. */
+export const SCHEMA_VERSION = '1.0.0' as const;
 
 /**
  * Stable identifier for any AEP entity. Opaque to clients; hosts MUST keep ids stable across

@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { Operation } from '@aep/schema';
-import type { AudioClip, ErrorCode, MidiClip, Operation as OperationT, Project } from '@aep/schema';
-import type { AepError } from '@aep/core';
-import { isAepError } from '@aep/core';
+import { Operation } from '@wty.dev/aep-schema';
+import type {
+  AudioClip,
+  ErrorCode,
+  MidiClip,
+  Operation as OperationT,
+  Project,
+} from '@wty.dev/aep-schema';
+import type { AepError } from '@wty.dev/aep-core';
+import { isAepError } from '@wty.dev/aep-core';
 import { applyOperation, applyOperations } from './apply.js';
 import { DEMO_LIMITS, demoContext, demoProject } from './fixtures.js';
 
@@ -542,6 +548,21 @@ describe('midi.notes.*', () => {
         }),
       'precondition_failed',
     );
+    // Duplicate ids within the batch itself are rejected, with the note index.
+    const dup = expectCode(
+      () =>
+        apply(demoProject(), {
+          op: 'midi.notes.add',
+          clipId: 'c-midi',
+          notes: [
+            { id: 'n9', pitch: 60, start: 0, duration: 1, velocity: 1 },
+            { id: 'n10', pitch: 62, start: 0, duration: 1, velocity: 1 },
+            { id: 'n9', pitch: 64, start: 0, duration: 1, velocity: 1 },
+          ],
+        }),
+      'precondition_failed',
+    );
+    expect(dup.message).toContain("duplicate note id 'n9' at index 2");
     const tight = demoContext({ limits: { ...DEMO_LIMITS, maxNotesPerClip: 8 } });
     expectCode(
       () =>
@@ -613,6 +634,20 @@ describe('midi.events.update', () => {
 });
 
 describe('tempo.update / meter.update', () => {
+  it('accepts and round-trips the point curve', () => {
+    const r = apply(demoProject(), {
+      op: 'tempo.update',
+      tempo: [
+        { beat: 0, bpm: 60, curve: 'linear' },
+        { beat: 4, bpm: 120 },
+      ],
+    });
+    expect(r.tempo).toEqual([
+      { beat: 0, bpm: 60, curve: 'linear' },
+      { beat: 4, bpm: 120, curve: 'step' },
+    ]);
+  });
+
   it('replaces the maps', () => {
     const r = apply(demoProject(), {
       op: 'tempo.update',
@@ -723,6 +758,34 @@ describe('routing.update', () => {
     );
   });
 
+  it('rejects duplicate send targets', () => {
+    const p = apply(demoProject(), {
+      op: 'track.add',
+      track: { id: 't-b2', name: 'B2', kind: 'bus' },
+    });
+    expectCode(
+      () =>
+        apply(p, {
+          op: 'routing.update',
+          trackId: 't-midi',
+          sends: [
+            { targetTrackId: 't-bus' },
+            { targetTrackId: 't-b2' },
+            { targetTrackId: 't-bus' },
+          ],
+        }),
+      'precondition_failed',
+    );
+    // Output and send sharing a target is not a duplicate.
+    const r = apply(p, {
+      op: 'routing.update',
+      trackId: 't-midi',
+      output: 't-bus',
+      sends: [{ targetTrackId: 't-bus' }],
+    });
+    expect(track(r, 't-midi').sends).toHaveLength(1);
+  });
+
   it('rejects routing cycles', () => {
     let r = apply(demoProject(), {
       op: 'track.add',
@@ -767,6 +830,48 @@ describe('instrument.set', () => {
         }),
       'not_found',
     );
+  });
+
+  it('refuses to clear or replace an instrument targeted by an automation lane', () => {
+    const withLane = apply(demoProject(), {
+      op: 'automation.lane.add',
+      trackId: 't-midi',
+      lane: {
+        id: 'al-1',
+        target: { kind: 'device', deviceId: 'dev-inst', parameter: 'gain' },
+      },
+    });
+    const err = expectCode(
+      () => apply(withLane, { op: 'instrument.set', trackId: 't-midi', instrument: null }),
+      'precondition_failed',
+    );
+    expect(err.message).toContain('remove the lane first');
+    expectCode(
+      () =>
+        apply(withLane, {
+          op: 'instrument.set',
+          trackId: 't-midi',
+          instrument: { id: 'dev-2', type: 'aep.synth' },
+        }),
+      'precondition_failed',
+    );
+    // Replacing with a device that keeps the same id leaves the lane target valid.
+    const r = apply(withLane, {
+      op: 'instrument.set',
+      trackId: 't-midi',
+      instrument: { id: 'dev-inst', type: 'aep.synth' },
+    });
+    expect(track(r, 't-midi').instrument?.type).toBe('aep.synth');
+    // Clearing an instrument with no targeting lane is fine (t-audio has none).
+    const cleared = apply(
+      apply(demoProject(), {
+        op: 'instrument.set',
+        trackId: 't-audio',
+        instrument: { id: 'dev-9', type: 'aep.synth' },
+      }),
+      { op: 'instrument.set', trackId: 't-audio', instrument: null },
+    );
+    expect(track(cleared, 't-audio').instrument).toBeNull();
   });
 });
 
@@ -818,6 +923,28 @@ describe('effect ops', () => {
       'precondition_failed',
     );
     expectCode(() => apply(demoProject(), { op: 'effect.remove', deviceId: 'nope' }), 'not_found');
+  });
+
+  it('refuses to remove an effect targeted by an automation lane', () => {
+    let r = apply(demoProject(), {
+      op: 'effect.insert',
+      trackId: 't-audio',
+      effect: { id: 'fx-1', type: 'aep.eq' },
+    });
+    r = apply(r, {
+      op: 'automation.lane.add',
+      trackId: 't-audio',
+      lane: { id: 'al-1', target: { kind: 'device', deviceId: 'fx-1', parameter: 'freq' } },
+    });
+    const err = expectCode(
+      () => apply(r, { op: 'effect.remove', deviceId: 'fx-1' }),
+      'precondition_failed',
+    );
+    expect(err.message).toContain('remove the lane first');
+    // Removing the lane first unblocks the removal.
+    r = apply(r, { op: 'automation.lane.remove', laneId: 'al-1' });
+    r = apply(r, { op: 'effect.remove', deviceId: 'fx-1' });
+    expect(track(r, 't-audio').effects).toHaveLength(0);
   });
 });
 

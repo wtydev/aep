@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CORE_PROTOCOL } from '@aep/schema';
-import type { CoreRequest } from '@aep/schema';
+import { CORE_PROTOCOL } from '@wty.dev/aep-schema';
+import type { CoreRequest } from '@wty.dev/aep-schema';
 import { InMemoryTransport } from './memory.js';
 import { FakeHandler } from './test-handler.js';
 

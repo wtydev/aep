@@ -4,7 +4,7 @@
   "properties": {
     "protocol": {
       "type": "string",
-      "const": "mep/core/1"
+      "const": "aep/1"
     },
     "session": {
       "type": "string",
@@ -71,5 +71,66 @@
     "status"
   ],
   "additionalProperties": false,
-  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/core-result.schema.json"
+  "$id": "https://github.com/wtydev/aep/schemas/1.0.0/core-result.schema.json",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "revision",
+          "output"
+        ],
+        "not": {
+          "required": [
+            "error"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "error"
+        ],
+        "not": {
+          "required": [
+            "output"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "indeterminate"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "error": {
+            "properties": {
+              "next": {
+                "const": "reconcile"
+              }
+            },
+            "required": [
+              "next"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

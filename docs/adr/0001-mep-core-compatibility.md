@@ -1,6 +1,6 @@
 # ADR 0001: MEP Core 1 compatibility
 
-Status: Accepted, 2026-11-22
+Status: Superseded by 0006, 2026-11-22
 
 ## Context
 
@@ -58,7 +58,7 @@ The gaps AEP fills, which Core 1 does not define:
 
 - Clients written against Core 1 can parse AEP envelopes unchanged.
 - Any change to the vendored schema MUST be reflected by updating the pinned commit and re-running the test.
-- A reader MUST NOT take the vendored test as evidence that AEP is a conforming MEP Core 1 implementation. Conformance of AEP is defined by `specs/core/SPECIFICATION.md` section 20.
+- A reader MUST NOT take the vendored test as evidence that AEP is a conforming MEP Core 1 implementation. Conformance of AEP is defined by `specs/core/SPECIFICATION.md` section 21.
 - Core 1's durability requirement, as recorded in the research notes (not in the vendored schema), requires a reservation to be durable before an effect. The reference ledger is in memory (`ledger.ts`). AEP therefore does not yet claim that durability. This is an open item.
 
 ## Alternatives considered

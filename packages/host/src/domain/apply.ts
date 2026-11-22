@@ -18,7 +18,7 @@ import {
   Track,
   TrackPatch,
   toSeconds,
-} from '@aep/schema';
+} from '@wty.dev/aep-schema';
 import type {
   Asset,
   Diagnostic,
@@ -28,8 +28,8 @@ import type {
   MidiClip,
   Operation,
   TrackKind,
-} from '@aep/schema';
-import { AepError, isAepError } from '@aep/core';
+} from '@wty.dev/aep-schema';
+import { AepError, isAepError } from '@wty.dev/aep-core';
 
 /** Inputs an operation needs beyond the project value itself. */
 export interface ApplyContext {
@@ -214,6 +214,18 @@ const checkRoutingTarget = (project: Project, selfId: Id, targetId: Id, what: st
   if (!target) notFound(`${what} target track '${targetId}'`);
   if (target.kind !== 'bus') {
     badPrecondition(`${what} target '${targetId}' is a '${target.kind}' track, must be a bus`);
+  }
+};
+
+/** Fail when a lane on the track targets `deviceId`; the client must remove the lane first. */
+const checkNoLaneTargetsDevice = (track: Track, deviceId: Id): void => {
+  const lane = track.automation.find(
+    (l) => l.target.kind === 'device' && l.target.deviceId === deviceId,
+  );
+  if (lane) {
+    badPrecondition(
+      `device '${deviceId}' is targeted by automation lane '${lane.id}' on track '${track.id}'; remove the lane first`,
+    );
   }
 };
 
@@ -506,10 +518,15 @@ export function applyOperation(project: Project, op: Operation, ctx: ApplyContex
       const clip = requireMidi(located.clip);
       const notes = op.notes.map((n, i) => parseOrFail(Note, n, `note ${i}`));
       const existing = new Set(clip.notes.map((n) => n.id));
-      for (const n of notes) {
+      const batch = new Set<Id>();
+      for (const [i, n] of notes.entries()) {
         if (existing.has(n.id)) {
           badPrecondition(`note id '${n.id}' already exists in clip '${clip.id}'`);
         }
+        if (batch.has(n.id)) {
+          badPrecondition(`duplicate note id '${n.id}' at index ${i} in the batch`);
+        }
+        batch.add(n.id);
       }
       if (clip.notes.length + notes.length > ctx.limits.maxNotesPerClip) {
         fail('limit_exceeded', `clip '${clip.id}' exceeds maxNotesPerClip`);
@@ -616,8 +633,13 @@ export function applyOperation(project: Project, op: Operation, ctx: ApplyContex
         track.output = op.output;
       }
       if (op.sends !== undefined) {
+        const sendTargets = new Set<Id>();
         for (const send of op.sends) {
           checkRoutingTarget(next, track.id, send.targetTrackId, 'send');
+          if (sendTargets.has(send.targetTrackId)) {
+            badPrecondition(`duplicate send target '${send.targetTrackId}'`);
+          }
+          sendTargets.add(send.targetTrackId);
         }
         track.sends = structuredClone(op.sends);
       }
@@ -631,6 +653,7 @@ export function applyOperation(project: Project, op: Operation, ctx: ApplyContex
       const track = next.tracks.find((t) => t.id === op.trackId);
       if (!track) notFound(`track '${op.trackId}'`, `/tracks/${op.trackId}`);
       if (op.instrument === null) {
+        if (track.instrument !== null) checkNoLaneTargetsDevice(track, track.instrument.id);
         track.instrument = null;
       } else {
         const device = parseOrFail(Device, op.instrument, 'instrument');
@@ -638,6 +661,9 @@ export function applyOperation(project: Project, op: Operation, ctx: ApplyContex
           badPrecondition(`device id '${device.id}' already exists`);
         }
         checkAssetRef(ids, device.assetId, `instrument '${device.id}'`);
+        if (track.instrument !== null && track.instrument.id !== device.id) {
+          checkNoLaneTargetsDevice(track, track.instrument.id);
+        }
         track.instrument = device;
       }
       break;
@@ -679,6 +705,7 @@ export function applyOperation(project: Project, op: Operation, ctx: ApplyContex
       if (located.where === 'instrument') {
         badPrecondition(`device '${op.deviceId}' is an instrument; use instrument.set null`);
       }
+      checkNoLaneTargetsDevice(located.track, op.deviceId);
       located.track.effects.splice(located.index, 1);
       break;
     }

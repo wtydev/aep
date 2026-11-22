@@ -1,29 +1,29 @@
-# AEP v0.1 — implementation design (normative for the reference SDK)
+# AEP 1.0 — implementation design (normative for the reference SDK)
 
 This is the working design that the packages implement. `specs/` restates it normatively for
 third-party implementers. When the two disagree, fix one; do not let them drift.
 
 ## 0. Layering and packages
 
-| Package          | Role                                                                                                                                                                         | Depends on                      |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| `@aep/schema`    | Zod schemas, TS types, JSON Schema export, time conversions. **The contract.**                                                                                               | zod                             |
-| `@aep/core`      | Domain-independent utilities: errors, canonical JSON, version negotiation, request ledger (idempotency), entity diff/apply/invert, safe path resolution, credential helpers. | schema                          |
-| `@aep/host`      | Host SDK + in-memory reference host: audio-domain operation appliers, invariants, scope checks, sessions, transactions, proposals, history, assets, jobs.                    | schema, core                    |
-| `@aep/transport` | Bindings that move MEP Core 1 documents: directory (MEP Core local binding), stdio (NDJSON), in-memory. Host side and client side.                                           | schema, core                    |
-| `@aep/client`    | Typed client SDK over any client transport.                                                                                                                                  | schema, core, transport         |
-| `@aep/testing`   | Conformance suite (runs against any host through a transport) + CLI.                                                                                                         | schema, core, client, transport |
+| Package                  | Role                                                                                                                                                                                   | Depends on                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `@wty.dev/aep-schema`    | Zod schemas, TS types, JSON Schema export, time conversions. **The contract.**                                                                                                         | zod                                   |
+| `@wty.dev/aep-core`      | Domain-independent utilities: errors, canonical JSON, version negotiation, request ledger (idempotency), entity diff/apply/invert, safe path resolution, credential helpers.           | schema                                |
+| `@wty.dev/aep-host`      | Host SDK + reference host (in-memory, or durable with `dataDir`): audio-domain operation appliers, invariants, scope checks, sessions, transactions, proposals, history, assets, jobs. | schema, core                          |
+| `@wty.dev/aep-transport` | Bindings that move AEP envelope documents: directory, stdio (NDJSON), in-memory. Host side and client side.                                                                            | schema, core                          |
+| `@wty.dev/aep-client`    | Typed client SDK over any client transport.                                                                                                                                            | schema, core, transport               |
+| `@wty.dev/aep-testing`   | Conformance suite (runs against any host through a transport) + CLI.                                                                                                                   | schema, core, client, transport, host |
 
 No package may depend on an audio renderer, DSP, UI, or AI provider.
 
-## 1. Wire: AEP is a MEP Core 1 domain profile
+## 1. Wire: AEP envelope
 
-Every document on the wire validates against MEP Core 1 (`mep/core/1`) `core.schema.json`:
+Every document on the wire validates against the envelope schemas (`schemas/core-request.schema.json`, `core-result.schema.json`, `core-manifest.schema.json`, `core-state.schema.json`). `protocol` is `aep/1`:
 request `{protocol, session, workspace, id, credential, action, version, baseRevision?, params}`;
 result `{protocol, session, workspace, id, status, revision?, output?, error?}`.
 
 - `workspace` = AEP project id. One session ↔ one project.
-- `action` = AEP action name (see `ACTIONS` in `packages/schema/src/actions.ts`), `version` = 1 for all v0.1 actions.
+- `action` = AEP action name (see `ACTIONS` in `packages/schema/src/actions.ts`), `version` = 1 for every AEP 1.0 action.
 - Request `id` = transaction id = idempotency key. Dedupe by `(session, id)`; same id + same
   fingerprint (canonical JSON of the request without `credential`) returns the stored result
   **verbatim**; same id + different fingerprint → `id_conflict`.
@@ -46,15 +46,25 @@ result `{protocol, session, workspace, id, status, revision?, output?, error?}`.
    expired → `session_expired`; revoked → `session_revoked`; workspace ≠ session project → `not_authorized`.
 3. Action: not in `ACTIONS` → `unknown_action`; `version` ≠ 1 → `unsupported_version`;
    capability not declared by the host → `capability_unsupported`; not permitted for the session
-   role/grants → `not_authorized`.
-4. Size: serialized request > `limits.maxRequestBytes` → `limit_exceeded`.
-5. Ledger `begin` (replay / pending→`busy` / conflict→`id_conflict`). Steps 1–4 failures are NOT
+   role/grants → `not_authorized`; serialized request > `limits.maxRequestBytes` →
+   `limit_exceeded` (checked last in this step).
+4. Ledger `begin` (replay / pending→`busy` / conflict→`id_conflict`). Failures in steps 1–3 are NOT
    recorded in the ledger (no identity reserved for unauthenticated or malformed input).
+5. Durable host, write actions only: reserve the request and persist the reservation before any
+   effect. If that write fails, nothing ran: the reservation is dropped, the request is not
+   recorded, and the answer is `internal_error`.
 6. Params against the action schema → `invalid_params` (diagnostics with JSON paths).
 7. Write actions: `baseRevision` missing → `invalid_params`; stale → `conflict`.
-8. Execute. Unexpected exceptions → `internal_error` (`failed`) only if state is untouched
-   (always true in the reference host since commits are a single reference swap).
-9. Store result + diagnostics in the ledger, return.
+8. Execute. An unexpected exception → `internal_error` (`failed`) only if state is untouched
+   (always true in the reference host, since a commit is a single reference swap).
+9. Store result + diagnostics in the ledger, return. A durable host persists the final state
+   before it answers a write. If that write fails after a succeeded effect:
+   - the write cannot have reached disk and the effect is reversible: the host reverts the effect
+     and answers `internal_error` (a retry runs as a new request);
+   - otherwise the host keeps the effect and records `outcome_uncertain` (`indeterminate`,
+     `next: reconcile`) for the request id.
+
+   A rejected request whose final write fails keeps its rejection.
 
 ## 2. State model
 
@@ -133,18 +143,20 @@ Key semantics:
 - `tempo.update`/`meter.update` replace the full maps; must be sorted, first at 0, no duplicate
   positions. Stored positions are never rewritten: beats-timebase objects keep their beat
   positions (and so move in absolute time), seconds-timebase objects keep their seconds.
-- `effect.update.patch.parameters` merges; `null` deletes a key. `instrument.set null` removes.
+- `effect.update.patch.parameters` merges; `null` deletes a key. `instrument.set null` removes, unless an automation lane on the track targets the instrument (`precondition_failed`).
+- `automation.lane.add`: a `device` target must exist on the same track (`not_found` if the device
+  is missing, `precondition_failed` if it is on another track).
 - `automation.points.update`: replace points in `[range.start, range.end)` (or all), keep sorted,
-  reject duplicate times. Device targets must exist on the same track.
-- `asset.link {assetId}`: asset must exist in the host asset store → copy descriptor into
-  `project.assets`; else `asset_not_found`. `asset.unlink`: fails `precondition_failed` if any clip
-  or device references it.
+  reject duplicate times (`precondition_failed`).
+- `asset.link {assetId}`: id already in `project.assets` → `precondition_failed`; asset must exist in
+  the host asset store → copy descriptor into `project.assets`; else `asset_not_found`.
+  `asset.unlink`: fails `precondition_failed` if any clip or device references it.
 - `routing.update`: `output`/send targets must be existing `bus` tracks (≠ self); no routing cycles.
 
 Invariants (`validateInvariants`): unique ids per id space; tempo/meter sorted and start at 0;
 every clip references an existing project asset (audio) and lives on a compatible track; every
 `assetId` on a device exists in `project.assets`; `parentId` exists and creates no cycle;
-routing targets valid and acyclic; notes per clip ≤ `limits.maxNotesPerClip`; tracks ≤ `limits.maxTracks`.
+routing targets valid and acyclic; notes per clip ≤ `limits.maxNotesPerClip`; tracks ≤ `limits.maxTracks`. Invariants 11 to 15 of `AUDIO-DOMAIN.md` §7.1 are also checked (device-lane linkage, automation point order, unique send targets, audio asset media type, audio source bounds).
 Invariant failures reject the transaction with `validation_failed` (diagnostic code
 `invariant_violation`); during undo/redo they surface as `undo_conflict`.
 
@@ -200,11 +212,16 @@ proposed state}`. Does NOT change accepted state or revision. Result `revision` 
 - `proposal.get {includeState}` returns proposal + optional proposed state. `proposal.list`.
 - `proposal.accept` (edit role, `baseRevision` = current): if the project revision still equals
   the proposal base → commit proposed state. Otherwise attempt `applyChanges(current, changes)`
-  (clean only if every changed entity is unchanged since the base); success → commit with
-  `kind: 'proposal'`, else mark proposal `stale` and reject `proposal_stale`. Scope and invariants
-  are re-checked on the actual resulting diff at accept time.
+  (clean only if every changed entity is unchanged since the base) and re-run the invariants on the
+  result. If either fails, mark the proposal `stale` and reject `proposal_stale`. Otherwise commit
+  with `kind: 'proposal'`. When the base is unchanged the stored proposed state is committed as is;
+  its invariants were checked at creation.
+- Scope is checked on the actual resulting diff at accept time, against the accepting session's
+  scope, the proposal's own scope and the proposer's session scope. A violation rejects with
+  `scope_violation` and leaves the proposal open.
 - `proposal.reject` closes it (`rejected`). Accepted/rejected proposals → `proposal_closed`
-  on accept/reject; a `stale` proposal may still be rejected (to close it) but not accepted.
+  on accept/reject; a `stale` proposal may still be rejected (to close it); accepting it →
+  `proposal_stale`.
 - At most `limits.maxOpenProposals` open per project.
 - `render.request {proposalId}` previews proposed state.
 
@@ -213,15 +230,17 @@ proposed state}`. Does NOT change accepted state or revision. Result `revision` 
 - Every commit (transaction, proposal accept, undo, redo) appends a `HistoryEntry` holding its
   `changes`.
 - `history.undo {transactionId?}` (requires `baseRevision`): target = given transaction or the
-  most recent entry that is undoable, not already undone, and not itself an undo that has been
-  redone. Apply `invertChanges(target.changes)` to the current entity map. If any change no longer
+  most recent entry that is not an undo, is undoable and is not already undone. A given
+  transaction that is unknown → `not_found`; one that is an undo, not undoable or already undone →
+  `precondition_failed`. Apply `invertChanges(target.changes)` to the current entity map. If any change no longer
   matches (a later commit modified the same entity) → `undo_conflict` (nothing changes). Success
   commits a new revision (`kind: 'undo'`, `targetTransactionId`), marks target `undoneBy`.
   Undo never rewinds revision ids; it moves forward to a new revision whose content equals the
   pre-target state for the affected entities.
-- `history.redo`: re-applies the most recent undo's target changes, only if no non-undo/redo
-  commit happened after that undo (linear redo stack) and changes apply cleanly
-  (`undo_conflict` otherwise; `nothing_to_redo` if none).
+- `history.redo`: re-applies the target changes of the most recent undo that has not been redone,
+  only if no `commit` or `proposal` entry follows it (linear redo stack) and the changes apply
+  cleanly (`undo_conflict` otherwise; `nothing_to_redo` if none, or if the target has left
+  history). Redo marks that undo `undoneBy`; the redo itself can be undone.
 - Nothing to undo → `nothing_to_undo`.
 - Undo covers project state only. Render artifacts, imported files and job side effects are not
   undone (documented limitation). Entries are `undoable: false` only if the host cannot invert
@@ -229,12 +248,23 @@ proposed state}`. Does NOT change accepted state or revision. Result `revision` 
 
 ## 9. Assets
 
-- Host asset store (per host, not per project): `id → Asset + bytes` (reference host: in-memory
-  bytes + computed `sha256:` content hash).
-- `asset.import {root, path}` (admin role by default): resolves `path` with
-  `resolveInsideRoot(importRoots[root], path)`; rejects traversal/absolute/symlink escape
-  (`path_rejected`); unknown root → `path_rejected`; missing file → `asset_not_found`; size limit
-  → `limit_exceeded`. Registers the asset in the store (no project revision change) and returns it.
+- Host asset store (per host, not per project): `id → Asset + bytes`. The reference host keeps the
+  bytes in memory and computes the `sha256:` content hash. A durable host also writes each blob to
+  `assets/<sha256 hex>` under `dataDir` (`SPECIFICATION.md` §17.5). Assets are always
+  `availability: available`.
+- `asset.import {root, path, mediaType?, assetId?}` (admin role by default). Check order in the
+  reference host:
+  1. unknown `root` → `path_rejected`;
+  2. resolve `path` with `resolveInsideRoot(importRoots[root], path)`: traversal, absolute path or
+     symlink escape → `path_rejected`;
+  3. media type (given, else inferred from the file name) not importable → `invalid_params`;
+  4. open without following a final symlink: no file → `asset_not_found`;
+  5. not a regular file, or the file changed during the import → `path_rejected`;
+  6. size above the import limit → `limit_exceeded`;
+  7. `assetId` already in the store → `precondition_failed`.
+
+  It registers the asset in the store (no project revision change) and returns it.
+
 - `asset.list {store}`: project assets, or store assets when `store: true`.
 - Clients never see host filesystem paths. Large payloads never travel inside JSON.
 
@@ -244,8 +274,8 @@ proposed state}`. Does NOT change accepted state or revision. Result `revision` 
   `baseRevision`) validates params, snapshots the revision (or proposal), returns `{job}` with
   `state: queued`. `job.status`, `job.cancel` (queued/running → cancelled; terminal →
   `job_not_cancellable`).
-- Jobs never mutate project state. Outputs are assets in the host store (`availability: pending`
-  until done) and/or `operations` the client can submit.
+- Jobs never mutate project state. Outputs are assets in the host store and/or `operations` the
+  client can submit.
 - Host SDK: pluggable `JobExecutor` per kind. Reference host ships **test fixtures only**:
   `aep.reference.manifest-renderer` produces an `application/vnd.aep.render-manifest+json` asset
   describing what would be rendered (no audio); `aep.reference.pattern` generator returns
@@ -254,16 +284,23 @@ proposed state}`. Does NOT change accepted state or revision. Result `revision` 
 
 ## 11. Transports (see TRANSPORT.md)
 
-- **Directory binding (MEP Core 1 local binding)**: host writes `mep.json` (manifest),
+- **Directory binding**: host writes `aep.json` (manifest),
   `state.json` (`CoreState` with `data` = project), `results/<id>.json`; client writes
-  `requests/<id>.json` via `requests/.<id>.tmp` + `link()` (atomic, fails if the target exists), never overwriting an existing request.
-  Host processes requests in arrival order (mtime, then name), publishes results via tmp+rename,
-  refreshes `state.json` after each commit. One directory per session. Dir mode 0700, files 0600.
+  `requests/<id>.json` via `requests/.<id>.<random>.tmp` + `link()` (atomic, fails if the target
+  exists), never overwriting an existing request.
+  Host processes requests one at a time in arrival order (mtime, then name), publishes each result
+  via tmp+rename (`results/<id>.json`, with `invalid` in place of an id that is not file-safe),
+  deletes the request file, then rewrites `state.json`. One directory per session. Dir mode 0700,
+  files 0600. A request file over 4 MiB or not valid JSON gets a `bad_request` result.
 - **Stdio binding**: newline-delimited JSON, UTF-8, one JSON object per line. Client→host lines
-  are `CoreRequest`s. Host→client lines are `{"type":"result","result":CoreResult}`, plus
+  are `CoreRequest`s, or the meta lines `{"type":"state"}` and `{"type":"manifest"}`, which the host
+  answers with `{"type":"state","state":CoreState}` and `{"type":"manifest","manifest":CoreManifest}`.
+  Host→client lines are `{"type":"result","result":CoreResult}`, plus
   `{"type":"hello","manifest":CoreManifest}` once at startup. Requests may be pipelined; results
-  may arrive out of order and are matched by `id`. Malformed line → host writes a `bad_request`
-  result with `id` `"invalid"` if no id could be read. EOF on stdin = shutdown.
+  may arrive out of order and are matched by `id`. A line that is not JSON, or longer than 4 MiB,
+  gets a `bad_request` result with `id` `"invalid"`. EOF on stdin = shutdown.
 - **In-memory**: direct call, for tests and embedding.
 
 All bindings carry the same documents; semantics are transport-independent.
+
+Durability (`SPECIFICATION.md` §17): `AepHost.open({ dataDir })` writes one atomic JSON state file and content-addressed asset files, and reports `host.durability: durable`. A host opened without `dataDir` is volatile. A durable host persists a write before it answers `succeeded`. Sessions are written in the background; `await host.flush()` makes them durable. A failed write gives `internal_error` or `outcome_uncertain` (validation order, steps 5 and 9).

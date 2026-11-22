@@ -1,5 +1,5 @@
 /**
- * AEP actions: params and outputs carried inside MEP Core 1 requests/results.
+ * AEP actions: params and outputs carried inside `aep/1` requests/results.
  */
 import { z } from 'zod';
 import { Extensions, Id, RevisionId, TimeRange } from './common.js';
@@ -13,6 +13,10 @@ import { Operation, OperationNameSchema } from './operations.js';
  * A session scope (granted by the host) and a transaction scope (self-imposed by the client)
  * are both enforced; the effective scope is their intersection.
  */
+/** Session role. Grants per role: {@link ROLE_ACTIONS}. */
+export const SessionRole = z.enum(['read', 'propose', 'edit', 'admin']);
+export type SessionRole = z.infer<typeof SessionRole>;
+
 export const Scope = z.strictObject({
   /** Changes must be inside these tracks (the track entity itself or its descendants). */
   tracks: z.array(Id).min(1).optional(),
@@ -92,7 +96,7 @@ export const ClientInfo = z.strictObject({ name: z.string().max(128), session: z
 
 /** Structured receipt for a committed state change (transaction, proposal accept, undo, redo). */
 export const Receipt = z.strictObject({
-  /** = the MEP Core request id that produced this commit. */
+  /** = the request id that produced this commit. */
   transactionId: z.string(),
   kind: z.enum(['commit', 'proposal', 'undo', 'redo']),
   projectId: Id,
@@ -238,7 +242,15 @@ export const CapabilitiesOutput = z.strictObject({
     supportedVersions: z.array(z.string()).min(1),
     schemaVersion: z.string(),
   }),
-  host: z.strictObject({ name: z.string(), version: z.string() }),
+  host: z.strictObject({
+    name: z.string(),
+    version: z.string(),
+    /**
+     * `durable`: the host persists the state listed in SPECIFICATION.md §17 and survives restarts.
+     * `volatile`: that state is lost on restart (results of in-flight requests are unknown).
+     */
+    durability: z.enum(['durable', 'volatile']),
+  }),
   /** Capability id → capability version and options. Only declared capabilities may be used. */
   capabilities: z.record(
     CapabilityId,
@@ -250,7 +262,7 @@ export const CapabilitiesOutput = z.strictObject({
   generators: z.array(Generator).default([]),
   limits: Limits,
   session: z.strictObject({
-    role: z.enum(['read', 'propose', 'edit', 'admin']),
+    role: SessionRole,
     scope: Scope.optional(),
     expiresAt: z.number().int(),
   }),
@@ -411,7 +423,7 @@ export type ActionName = keyof typeof ACTIONS;
 export type ActionParams<A extends ActionName> = z.input<(typeof ACTIONS)[A]['params']>;
 export type ActionOutput<A extends ActionName> = z.infer<(typeof ACTIONS)[A]['output']>;
 export const ACTION_NAMES = Object.keys(ACTIONS) as ActionName[];
-/** All AEP v0.1 actions are version 1 in MEP Core terms. */
+/** Every AEP 1.0 action is at action version 1. */
 export const ACTION_VERSION = 1;
 
 /** Write actions that do not require `baseRevision` (they never mutate project state). */
@@ -446,10 +458,7 @@ export const ACTION_CAPABILITY: Record<ActionName, string> = {
 };
 
 /** Which session roles may call which actions (host MUST also apply its own grants). */
-export const ROLE_ACTIONS: Record<
-  'read' | 'propose' | 'edit' | 'admin',
-  ReadonlySet<ActionName>
-> = (() => {
+export const ROLE_ACTIONS: Record<SessionRole, ReadonlySet<ActionName>> = (() => {
   const read: ActionName[] = [
     'aep.capabilities',
     'project.inspect',

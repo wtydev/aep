@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AepError } from '@aep/core';
+import { AepError } from '@wty.dev/aep-core';
 import {
   PATTERN_GENERATOR_ID,
   RENDER_MANIFEST_MEDIA_TYPE,
@@ -285,7 +285,7 @@ describe('DoD 9: jobs', () => {
     expect(Object.keys(caps.capabilities)).toContain('aep.render');
     expect(caps.limits.maxOperationsPerTransaction).toBeGreaterThan(0);
     expect(caps.session.role).toBe('read');
-    expect(caps.aep.protocolVersion).toBe('0.1');
+    expect(caps.aep.protocolVersion).toBe('1.0');
   });
 
   it('waitForJobs does not wait on a cancelled executor that ignores the signal', async () => {
@@ -326,5 +326,38 @@ describe('DoD 9: jobs', () => {
     const done = await finish(f, job.id);
     expect(done.error.code).toBe('limit_exceeded');
     expect(JSON.stringify(done)).not.toContain('/Users/someone');
+  });
+
+  it('an executor cannot store an invalid descriptor or report an asset it did not store', async () => {
+    const bad = (id: string, run: JobExecutor['run']): JobExecutor => ({
+      kind: 'render',
+      id,
+      describe: () => ({ outputs: ['audio'], deterministic: true }),
+      run,
+    });
+    const badMeta = bad('bad-meta', async (_input, ctx) => {
+      ctx.putAsset(new Uint8Array([1]), { mediaType: 'audio/wav', id: 'not a valid id!' });
+      return {};
+    });
+    const f = makeFixture({ executors: [badMeta] });
+    const done = await finish(f, output(await f.proposer.write('render.request', RENDER)).job.id);
+    expect(done.state).toBe('failed');
+    expect(output(await f.reader.call('asset.list', { store: true })).assets).toEqual([]);
+
+    const forged = bad('forged', async () => ({
+      assets: [
+        {
+          id: 'a-forged',
+          mediaType: 'audio/wav',
+          contentHash: `sha256:${'0'.repeat(64)}`,
+          byteLength: 1,
+          availability: 'available',
+          portability: 'host-local',
+        },
+      ],
+    }));
+    const g = makeFixture({ executors: [forged] });
+    const done2 = await finish(g, output(await g.proposer.write('render.request', RENDER)).job.id);
+    expect(done2.state).toBe('failed');
   });
 });

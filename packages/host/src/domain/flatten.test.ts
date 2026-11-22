@@ -63,4 +63,15 @@ describe('unflattenProject', () => {
     const project = demoProject();
     expect(unflattenProject(flattenProject(project))).toEqual(project);
   });
+
+  it('round-trips tempo point curves', () => {
+    const project = demoProject();
+    project.tempo = [
+      { beat: 0, bpm: 60, curve: 'linear' },
+      { beat: 4, bpm: 120, curve: 'step' },
+    ];
+    const restored = unflattenProject(flattenProject(project));
+    expect(restored).toEqual(project);
+    expect(restored.tempo[0]!.curve).toBe('linear');
+  });
 });

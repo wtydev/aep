@@ -68,5 +68,5 @@
     "meter"
   ],
   "additionalProperties": false,
-  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/project-describe-result.schema.json"
+  "$id": "https://github.com/wtydev/aep/schemas/1.0.0/project-describe-result.schema.json"
 }

@@ -3,10 +3,10 @@
  * assertions. Everything goes through the public wire protocol (CoreRequest / CoreResult), never
  * through host internals, so the same tests run against any host.
  */
-import type { AepClient } from '@aep/client';
-import { canonicalJson, generateId } from '@aep/core';
-import { ACTIONS, CORE_PROTOCOL, CoreResult, NO_BASE_REVISION_ACTIONS } from '@aep/schema';
-import type { ActionName, CoreRequest, NextStep, Project } from '@aep/schema';
+import type { AepClient } from '@wty.dev/aep-client';
+import { canonicalJson, generateId } from '@wty.dev/aep-core';
+import { ACTIONS, CORE_PROTOCOL, CoreResult, NO_BASE_REVISION_ACTIONS } from '@wty.dev/aep-schema';
+import type { ActionName, CoreRequest, NextStep, Project } from '@wty.dev/aep-schema';
 import type { LaunchedHost } from './suite.js';
 
 /** Deliberately loose: outputs are schema-checked where it matters, then probed by tests. */
@@ -51,7 +51,10 @@ export class TestContext {
   /** Capability ids from `aep.capabilities`. */
   readonly capabilities: ReadonlySet<string>;
 
+  private readonly launched: LaunchedHost;
+
   constructor(init: ContextInit) {
+    this.launched = init.launched;
     this.clients = init.launched.clients;
     this.credentials = init.launched.credentials;
     this.fixture = init.fixture;
@@ -86,6 +89,15 @@ export class TestContext {
 
   skipUnless(capability: string): void {
     if (!this.has(capability)) this.skip(`host does not declare capability '${capability}'`);
+  }
+
+  /**
+   * Kill the host and start it again over the same data directory (tests with `restart: true`).
+   * `clients` and `credentials` are replaced in place; sessions are expected to survive.
+   */
+  async restart(): Promise<void> {
+    if (!this.launched.restart) throw new ConformanceFailure('the launcher cannot restart hosts');
+    await this.launched.restart();
   }
 
   /** A request id / entity id that is unique within this test. */

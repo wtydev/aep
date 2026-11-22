@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { CoreResult } from '@aep/schema';
+import type { CoreResult } from '@wty.dev/aep-schema';
 import { RequestLedger } from './ledger.js';
 
 const result = (id: string): CoreResult => ({
-  protocol: 'mep/core/1',
+  protocol: 'aep/1',
   session: 's1',
   workspace: 'w1',
   id,
@@ -88,5 +88,57 @@ describe('RequestLedger', () => {
     expect(ledger.get('s', 'a')).toBe(res);
     expect(ledger.get('s', 'missing')).toBeUndefined();
     expect(ledger.get('other-session', 'a')).toBeUndefined();
+  });
+
+  it('abandon drops a pending reservation so a retry runs as new', () => {
+    const ledger = new RequestLedger();
+    ledger.begin('s', 'a', 'fa');
+    expect(ledger.abandon('s', 'a')).toBe(true);
+    expect(ledger.begin('s', 'a', 'fb')).toEqual({ kind: 'new' });
+    ledger.complete('s', 'a', result('a'));
+    expect(ledger.abandon('s', 'a')).toBe(false);
+    expect(ledger.abandon('s', 'nope')).toBe(false);
+  });
+
+  it('snapshot/restore round-trips records, recency order and pending reservations', () => {
+    const ledger = new RequestLedger();
+    ledger.begin('s', 'a', 'fa');
+    ledger.complete('s', 'a', result('a'));
+    ledger.begin('s', 'b', 'fb');
+    ledger.begin('s', 'c', 'fc');
+    ledger.complete('s', 'c', result('c'));
+    ledger.begin('s2', 'a', 'fa2');
+    const snap = JSON.parse(JSON.stringify(ledger.snapshot())) as ReturnType<
+      RequestLedger['snapshot']
+    >;
+
+    const copy = new RequestLedger();
+    copy.restore(snap);
+    expect(copy.snapshot()).toEqual(ledger.snapshot());
+    expect(copy.begin('s', 'a', 'fa')).toMatchObject({ kind: 'replay', result: result('a') });
+    expect(copy.begin('s', 'b', 'fb')).toEqual({ kind: 'pending' });
+    expect(copy.begin('s', 'a', 'other')).toEqual({ kind: 'conflict' });
+    expect(copy.pendingIds()).toEqual([
+      { session: 's', id: 'b' },
+      { session: 's2', id: 'a' },
+    ]);
+    copy.complete('s', 'b', result('b'));
+    expect(copy.pendingIds()).toEqual([{ session: 's2', id: 'a' }]);
+  });
+
+  it('restore applies the current retention to completed records only', () => {
+    const big = new RequestLedger({ retention: 10 });
+    for (const id of ['a', 'b', 'c', 'd']) {
+      big.begin('s', id, `f${id}`);
+      big.complete('s', id, result(id));
+    }
+    big.begin('s', 'p', 'fp');
+    const small = new RequestLedger({ retention: 2 });
+    small.restore(big.snapshot());
+    expect(small.get('s', 'a')).toBeUndefined();
+    expect(small.get('s', 'b')).toBeUndefined();
+    expect(small.get('s', 'c')).toBeDefined();
+    expect(small.get('s', 'd')).toBeDefined();
+    expect(small.begin('s', 'p', 'fp')).toEqual({ kind: 'pending' });
   });
 });

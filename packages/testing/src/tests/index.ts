@@ -3,6 +3,7 @@ import { TestRegistry } from '../suite.js';
 import { assetTests } from './assets.js';
 import { audioTests } from './audio.js';
 import { coreTests } from './core.js';
+import { durabilityTests } from './durability.js';
 import { historyTests } from './history.js';
 import { jobTests } from './jobs.js';
 import { proposalTests } from './proposals.js';
@@ -17,6 +18,7 @@ export const ALL_TESTS: ConformanceTest[] = [
   ...assetTests,
   ...jobTests,
   ...securityTests,
+  ...durabilityTests,
 ];
 
 /** A fresh registry holding {@link ALL_TESTS}; third parties may `register` more tests. */

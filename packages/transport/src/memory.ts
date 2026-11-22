@@ -1,4 +1,4 @@
-import type { CoreManifest, CoreRequest, CoreResult, CoreState } from '@aep/schema';
+import type { CoreManifest, CoreRequest, CoreResult, CoreState } from '@wty.dev/aep-schema';
 import type { ClientTransport, RequestHandler } from './types.js';
 
 const wireCopy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;

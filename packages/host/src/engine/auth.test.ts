@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { ACTION_NAMES, ROLE_ACTIONS } from '@aep/schema';
+import { ACTION_NAMES, ROLE_ACTIONS } from '@wty.dev/aep-schema';
 import { demoProject } from '../domain/fixtures.js';
 import { AepHost } from './host.js';
 import { errorCode, makeFixture, output, renameTrack } from './test-harness.js';
@@ -223,11 +223,11 @@ describe('DoD 1: authentication and authorization', () => {
 
   it('aep.capabilities negotiates the protocol version with the client list', async () => {
     const f = makeFixture();
-    const ok = await f.editor.call('aep.capabilities', { versions: ['0.2', '0.1'] });
+    const ok = await f.editor.call('aep.capabilities', { versions: ['2.0', '1.0'] });
     expect(ok.status).toBe('succeeded');
-    expect((ok.output as { aep: { protocolVersion: string } }).aep.protocolVersion).toBe('0.1');
-    // Before 1.0 minor versions are incompatible.
-    expect(errorCode(await f.editor.call('aep.capabilities', { versions: ['0.2'] }))).toBe(
+    expect((ok.output as { aep: { protocolVersion: string } }).aep.protocolVersion).toBe('1.0');
+    // Another major version is incompatible.
+    expect(errorCode(await f.editor.call('aep.capabilities', { versions: ['2.0'] }))).toBe(
       'unsupported_version',
     );
   });
@@ -250,5 +250,22 @@ describe('DoD 1: authentication and authorization', () => {
     await f.editor.call('project.inspect', {}, { id, credential: 'bad' });
     const r = await f.editor.call('receipt.get', { requestId: id });
     expect(errorCode(r)).toBe('not_found');
+  });
+
+  it('a replay refreshes the receipt as well as the ledger entry (both evict the same request)', async () => {
+    const f = makeFixture({ ledgerRetention: 2 });
+    const commit = (id: string, name: string) =>
+      f.editor.request(
+        'transaction.commit',
+        { transaction: { operations: [renameTrack('t-midi', name)] } },
+        { id, baseRevision: f.host.revision },
+      );
+    const a = commit('A', 'a');
+    output(await f.host.handle(a));
+    output(await f.host.handle(commit('B', 'b')));
+    output(await f.host.handle(a)); // replay: A is now the most recent
+    output(await f.host.handle(commit('C', 'c')));
+    expect(output(await f.editor.call('receipt.get', { requestId: 'A' })).requestId).toBe('A');
+    expect(errorCode(await f.editor.call('receipt.get', { requestId: 'B' }))).toBe('not_found');
   });
 });

@@ -20,10 +20,15 @@ const int = (min: number, max: number) => z.number().int().min(min).max(max);
 
 // ---------------------------------------------------------------- tempo / meter / sections
 
-/** Tempo segment start. Tempo is constant until the next point (no ramps in v0.1). */
+/**
+ * Tempo segment start. `curve` shapes the segment from this point to the next: `step` keeps
+ * `bpm` constant; `linear` ramps bpm linearly in beats to the next point's `bpm`. The last
+ * point's curve has no effect (tempo stays at its `bpm`).
+ */
 export const TempoPoint = z.strictObject({
   beat: nonNegative(),
   bpm: z.number().finite().min(1).max(999),
+  curve: z.enum(['step', 'linear']).default('step'),
 });
 export type TempoPoint = z.infer<typeof TempoPoint>;
 
@@ -188,6 +193,14 @@ export const Fade = z.strictObject({
   curve: z.enum(['linear', 'equal-power', 'exponential']).default('linear'),
 });
 
+/**
+ * Clip loop. The looped source region is `[start, start + length)`, where `start` is the clip's
+ * `sourceOffset` (audio) or `offset` (MIDI). `length` is in source units: seconds of the source
+ * asset for audio clips, the clip's timebase for MIDI clips.
+ */
+export const ClipLoop = z.strictObject({ enabled: z.boolean(), length: positive() });
+export type ClipLoop = z.infer<typeof ClipLoop>;
+
 const ClipCommon = {
   id: Id,
   name: z.string().max(256).optional(),
@@ -213,7 +226,7 @@ export const AudioClip = z.strictObject({
   assetId: Id,
   sourceOffset: nonNegative().default(0),
   playbackRate: z.number().finite().min(0.01).max(100).default(1),
-  loop: z.strictObject({ enabled: z.boolean(), length: positive() }).optional(),
+  loop: ClipLoop.optional(),
 });
 export type AudioClip = z.infer<typeof AudioClip>;
 
@@ -225,7 +238,7 @@ export const MidiClip = z.strictObject({
   ...ClipCommon,
   type: z.literal('midi'),
   offset: nonNegative().default(0),
-  loop: z.strictObject({ enabled: z.boolean(), length: positive() }).optional(),
+  loop: ClipLoop.optional(),
   notes: z.array(Note).default([]),
   controllers: z.array(ControllerEvent).default([]),
   pitchBends: z.array(PitchBendEvent).default([]),
@@ -272,7 +285,7 @@ export type Track = z.infer<typeof Track>;
 // ---------------------------------------------------------------- project
 
 export const Project = z.strictObject({
-  /** Doubles as the MEP Core workspace id, hence the stricter charset. */
+  /** Doubles as the envelope `workspace` id, hence the stricter charset. */
   id: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/),
   name: z.string().max(256).default(''),
   metadata: z
@@ -284,7 +297,7 @@ export const Project = z.strictObject({
   tempo: z
     .array(TempoPoint)
     .min(1)
-    .default([{ beat: 0, bpm: 120 }]),
+    .default([{ beat: 0, bpm: 120, curve: 'step' }]),
   /** Sorted by bar; first point MUST be at bar 0. */
   meter: z
     .array(MeterPoint)

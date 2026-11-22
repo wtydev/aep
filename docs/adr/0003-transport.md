@@ -26,7 +26,7 @@ Full binding rules are in `specs/core/TRANSPORT.md`.
 - Authentication, ledger and validation run in the host, not in the binding. A binding cannot skip them.
 - The directory binding is a local trust boundary. A process that can write to `requests/` as the same user can submit requests. The binding relies on credentials and file modes.
 - The directory binding stores the credential in the request file until the host removes it. This is documented as a security note, and implementations are expected to remove the file promptly.
-- The reference stdio client does not meet the client requirements in `TRANSPORT.md` section 3.4: it overwrites the pending entry for a duplicate id, drops invalid result lines, and has no default timeout. These are fixes to make, not properties to keep.
+- The v0.1 reference stdio client did not meet the client requirements in `TRANSPORT.md` section 3.4: it overwrote the pending entry for a duplicate id, dropped invalid result lines, and had no default timeout. Resolved in 1.0 (note of 2026-11-22): the client rejects a send whose id is pending, fails the matching request on an invalid result line, and times out after `requestTimeoutMs` (default 120 s).
 - The 4 MiB caps of the directory and stdio bindings are not derived from the host's `maxRequestBytes` limit. The two can disagree.
 
 ## Alternatives considered
@@ -34,4 +34,4 @@ Full binding rules are in `specs/core/TRANSPORT.md`.
 - **HTTP.** Rejected for v0.1. It adds a server, a port and a TLS question, none of which the target use case needs. A future binding can add it without changing the envelope.
 - **A single binding.** Rejected. Directory and stdio are for different clients, and the in-memory binding is needed for tests.
 - **Length-prefixed frames instead of NDJSON.** Rejected for stdio. NDJSON is readable in a terminal and sufficient for one request per line.
-- **Let each binding define its own envelope.** Rejected. It would break transport independence and the vendored Core test would no longer cover every binding.
+- **Let each binding define its own envelope.** Rejected. It would break transport independence and the conformance suite would no longer cover every binding.

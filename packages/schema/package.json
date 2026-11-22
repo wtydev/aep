@@ -1,6 +1,7 @@
 {
-  "name": "@aep/schema",
-  "version": "0.1.0",
+  "name": "@wty.dev/aep-schema",
+  "version": "1.0.0",
+  "description": "AEP wire envelope, project model, and Zod schemas for the Audio Edit Protocol",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,10 +25,32 @@
     "url": "https://github.com/wtydev/aep",
     "directory": "packages/schema"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": [
+    "aep",
+    "audio",
+    "protocol",
+    "schema",
+    "daw"
+  ],
+  "homepage": "https://github.com/wtydev/aep#readme",
+  "bugs": {
+    "url": "https://github.com/wtydev/aep/issues"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepack": "node -e \"const fs=require('node:fs');fs.rmSync('schemas',{recursive:true,force:true});fs.cpSync('../../schemas','schemas',{recursive:true})\""
   },
   "dependencies": {
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0"
   }
 }

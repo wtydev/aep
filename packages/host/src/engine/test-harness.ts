@@ -2,8 +2,8 @@
  * Shared helpers for the engine tests. Every result the host returns through `TestClient.call`
  * is validated with `CoreResult.parse` (definition-of-done item 11).
  */
-import { CORE_PROTOCOL, CoreResult } from '@aep/schema';
-import type { Operation, Scope } from '@aep/schema';
+import { CORE_PROTOCOL, CoreResult } from '@wty.dev/aep-schema';
+import type { Operation, Scope } from '@wty.dev/aep-schema';
 import { demoProject } from '../domain/fixtures.js';
 import { AepHost } from './host.js';
 import type { AepHostOptions, CreateSessionOptions } from './host.js';

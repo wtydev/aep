@@ -1,6 +1,6 @@
-import { AepError } from '@aep/core';
-import { CORE_PROTOCOL } from '@aep/schema';
-import type { CoreManifest, CoreResult } from '@aep/schema';
+import { AepError } from '@wty.dev/aep-core';
+import { CORE_PROTOCOL } from '@wty.dev/aep-schema';
+import type { CoreManifest, CoreResult } from '@wty.dev/aep-schema';
 
 /** A `bad_request` result for input the binding could not parse into a request. */
 export function badRequestResult(manifest: CoreManifest, id: string, message: string): CoreResult {

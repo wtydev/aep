@@ -13,10 +13,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { AepClient } from '@aep/client';
-import type { Job } from '@aep/schema';
-import { DirectoryClientTransport, StdioClientTransport } from '@aep/transport';
-import type { ClientTransport } from '@aep/transport';
+import { AepClient } from '@wty.dev/aep-client';
+import type { Job } from '@wty.dev/aep-schema';
+import { DirectoryClientTransport, StdioClientTransport } from '@wty.dev/aep-transport';
+import type { ClientTransport } from '@wty.dev/aep-transport';
 
 const USAGE = `Usage: aep-demo-client [--transport stdio|directory] [--host <path to host main.js>]
 
@@ -90,7 +90,7 @@ async function main(): Promise<void> {
             const { session } = JSON.parse(
               await readFile(`${credentialFile}.session.json`, 'utf8'),
             ) as { session: string };
-            await access(join(dir, session, 'mep.json'));
+            await access(join(dir, session, 'aep.json'));
             return join(dir, session);
           } catch {
             await sleep(25);

@@ -4,7 +4,7 @@
   "properties": {
     "protocol": {
       "type": "string",
-      "const": "mep/core/1"
+      "const": "aep/1"
     },
     "session": {
       "type": "string",
@@ -28,5 +28,5 @@
     "data"
   ],
   "additionalProperties": false,
-  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/core-state.schema.json"
+  "$id": "https://github.com/wtydev/aep/schemas/1.0.0/core-state.schema.json"
 }

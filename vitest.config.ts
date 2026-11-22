@@ -7,12 +7,12 @@ const pkg = (name: string) =>
 export default defineConfig({
   resolve: {
     alias: {
-      '@aep/schema': pkg('schema'),
-      '@aep/core': pkg('core'),
-      '@aep/host': pkg('host'),
-      '@aep/client': pkg('client'),
-      '@aep/transport': pkg('transport'),
-      '@aep/testing': pkg('testing'),
+      '@wty.dev/aep-schema': pkg('schema'),
+      '@wty.dev/aep-core': pkg('core'),
+      '@wty.dev/aep-host': pkg('host'),
+      '@wty.dev/aep-client': pkg('client'),
+      '@wty.dev/aep-transport': pkg('transport'),
+      '@wty.dev/aep-testing': pkg('testing'),
     },
   },
   test: {

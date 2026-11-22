@@ -1,5 +1,5 @@
 /**
- * @aep/core — domain-independent coordination utilities shared by hosts, clients and transports.
+ * @wty.dev/aep-core — domain-independent coordination utilities shared by hosts, clients and transports.
  *
  * CONTRACT (implemented in the modules re-exported below):
  *
@@ -15,14 +15,13 @@
  *   requestFingerprint(req: CoreRequest): string  // sha256 of canonicalJson of req minus `credential`
  *
  * version.ts
- *   SUPPORTED_PROTOCOL_VERSIONS: readonly string[]          // ['0.1']
+ *   SUPPORTED_PROTOCOL_VERSIONS: readonly string[]          // ['1.0']
  *   negotiateVersion(client: readonly string[], host: readonly string[]): string | null
- *     // highest version present in both; versions are 'MAJOR.MINOR'. Before 1.0, minor versions
- *     // are NOT mutually compatible (0.1 ≠ 0.2). From 1.0, same MAJOR is compatible; pick the
- *     // highest common MAJOR.MINOR.
+ *     // versions are 'MAJOR.MINOR'. Same MAJOR is compatible (before 1.0, only identical
+ *     // versions). A compatible pair negotiates to its lower version; the highest such result wins.
  *   isCompatible(a: string, b: string): boolean
  *
- * ledger.ts  — MEP Core dedup by (session, request id)
+ * ledger.ts  — AEP dedup by (session, request id)
  *   class RequestLedger {
  *     constructor(opts?: { retention?: number })              // max records kept per session, default 1000
  *     begin(session: string, id: string, fingerprint: string):
@@ -32,7 +31,16 @@
  *       | { kind: 'conflict' }                                 // same id, different fingerprint -> id_conflict
  *     complete(session: string, id: string, result: CoreResult): void
  *     get(session: string, id: string): CoreResult | undefined
+ *     abandon(session: string, id: string): boolean          // drop a pending record (nothing ran)
+ *     pendingIds(): { session: string; id: string }[]
+ *     snapshot(): LedgerSnapshot / restore(snapshot: LedgerSnapshot): void   // for durable hosts
  *   }
+ *   // After restore(), a durable host MUST complete every pendingIds() entry with an
+ *   // `outcome_uncertain` result (SPECIFICATION §17): the ledger itself has no error policy.
+ *
+ * handler.ts
+ *   interface RequestHandler { handle(req: unknown): Promise<CoreResult>; manifest(); state() }
+ *     // host side of a transport binding; implemented by hosts, consumed by transports
  *
  * entities.ts — generic entity-map diff used for receipts, scope checks, undo/redo and proposals
  *   interface EntityRecord { entity: EntityKind; value: unknown }   // value is a JSON value WITHOUT child collections
@@ -57,7 +65,7 @@
  * security.ts
  *   constantTimeEqual(a: string, b: string): boolean
  *   generateCredential(): string                                     // 32 random bytes base64url
- *   generateId(prefix: string): string                               // prefix + '-' + 16 hex chars, matches MEP Core id charset
+ *   generateId(prefix: string): string                               // prefix + '-' + 16 hex chars, matches the AEP id charset
  */
 export * from './errors.js';
 export * from './canonical.js';
@@ -67,3 +75,4 @@ export * from './entities.js';
 export * from './paths.js';
 export * from './match.js';
 export * from './security.js';
+export type { RequestHandler } from './handler.js';

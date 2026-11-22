@@ -22,7 +22,8 @@ Operations on the model are not all reversible by themselves, and a failed multi
 
 - Clients must read the current revision before writing. A read-modify-write without that read gets `conflict` and must retry.
 - Concurrent edits on different entities still conflict, because the revision is project-wide. This is simple and correct; it is not fine-grained. A future version could allow disjoint transactions to rebase.
-- Undo is only as good as the inverse. If another change touches the same entities, the inverse may not apply, and the result is `undo_conflict`, not a silent merge.- Storing full receipts costs memory. The retention limit bounds it, but a host that needs longer history must persist receipts itself.
+- Undo is only as good as the inverse. If another change touches the same entities, the inverse may not apply, and the result is `undo_conflict`, not a silent merge.
+- Storing full receipts costs memory. The retention limit bounds it. A durable host persists receipts with the rest of its state (`SPECIFICATION.md` section 17.2); a volatile host loses them on restart.
 
 ## Alternatives considered
 

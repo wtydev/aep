@@ -1,4 +1,4 @@
-import type { Change, EntityKind } from '@aep/schema';
+import type { Change, EntityKind } from '@wty.dev/aep-schema';
 import { AepError } from './errors.js';
 
 /**

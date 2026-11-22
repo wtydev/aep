@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { link, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { CoreManifest, CoreResult, CoreState } from '@aep/schema';
-import type { CoreRequest } from '@aep/schema';
+import { CoreManifest, CoreResult, CoreState } from '@wty.dev/aep-schema';
+import type { CoreRequest } from '@wty.dev/aep-schema';
 import { badRequestResult, internalErrorResult } from './results.js';
 import type { ClientTransport, RequestHandler } from './types.js';
 
@@ -26,9 +26,9 @@ export interface DirectoryHostBindingOptions {
 }
 
 /**
- * MEP Core 1 directory binding, host side.
+ * AEP 1 directory binding, host side.
  *
- * Publishes `mep.json` (manifest) and `state.json` (CoreState) in `dir` (mode 0700), polls
+ * Publishes `aep.json` (manifest) and `state.json` (CoreState) in `dir` (mode 0700), polls
  * `requests/*.json` and processes them serially in (mtime, name) order: each request file is
  * read (max 4 MiB), handed to the RequestHandler, answered in `results/<id>.json` via
  * tmp+rename (mode 0600), then deleted; `state.json` is republished after every request.
@@ -73,10 +73,10 @@ export class DirectoryHostBinding {
     await this.current;
   }
 
-  /** Write `mep.json` and `state.json`, atomically, mode 0600. */
+  /** Write `aep.json` and `state.json`, atomically, mode 0600. */
   async publish(): Promise<void> {
     await writeFileAtomic(
-      join(this.dir, 'mep.json'),
+      join(this.dir, 'aep.json'),
       JSON.stringify(this.handler.manifest(), null, 2),
     );
     await writeFileAtomic(
@@ -158,10 +158,10 @@ export interface DirectoryClientTransportOptions {
 }
 
 /**
- * MEP Core 1 directory binding, client side. `send` writes `requests/.<id>.<random>.tmp` and then
+ * AEP 1 directory binding, client side. `send` writes `requests/.<id>.<random>.tmp` and then
  * hard-links it to `requests/<id>.json` — the link fails with EEXIST rather than overwriting
  * a request already on disk. Results are polled at `results/<id>.json` and validated against
- * CoreResult. Manifest and state are read from `mep.json` / `state.json`.
+ * CoreResult. Manifest and state are read from `aep.json` / `state.json`.
  */
 export class DirectoryClientTransport implements ClientTransport {
   private readonly dir: string;
@@ -214,7 +214,7 @@ export class DirectoryClientTransport implements ClientTransport {
   }
 
   async manifest(): Promise<CoreManifest> {
-    return CoreManifest.parse(JSON.parse(await readFile(join(this.dir, 'mep.json'), 'utf8')));
+    return CoreManifest.parse(JSON.parse(await readFile(join(this.dir, 'aep.json'), 'utf8')));
   }
 
   async state(): Promise<CoreState> {

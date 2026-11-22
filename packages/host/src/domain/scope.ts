@@ -1,5 +1,5 @@
-import { canonicalJson, deepEqual, matchesOperationPattern } from '@aep/core';
-import { toSeconds, unitToSeconds } from '@aep/schema';
+import { canonicalJson, deepEqual, matchesOperationPattern } from '@wty.dev/aep-core';
+import { toSeconds, unitToSeconds } from '@wty.dev/aep-schema';
 import type {
   Change,
   Diagnostic,
@@ -8,7 +8,7 @@ import type {
   Operation,
   Project,
   Scope,
-} from '@aep/schema';
+} from '@wty.dev/aep-schema';
 
 /** Everything needed to validate a scope against the actual diff (design §5). */
 export interface ScopeCheckInput {

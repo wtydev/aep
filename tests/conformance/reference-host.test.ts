@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { InProcessLauncher, ProcessLauncher, formatHuman, runSuite } from '@aep/testing';
-import type { SuiteReport } from '@aep/testing';
+import { InProcessLauncher, ProcessLauncher, formatHuman, runSuite } from '@wty.dev/aep-testing';
+import type { SuiteReport } from '@wty.dev/aep-testing';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const HOST = fileURLToPath(new URL('../../examples/minimal-host/dist/main.js', import.meta.url));
@@ -23,8 +23,15 @@ function expectClean(report: SuiteReport): void {
     formatHuman(report),
   ).toEqual([]);
   expect(report.totals.failed).toBe(0);
-  expect(report.totals.passed).toBeGreaterThanOrEqual(45);
+  expect(report.totals.passed).toBeGreaterThanOrEqual(170);
   expect(report.levelsAchieved).toEqual(report.levels.map((l) => l.level));
+  // The reference host is durable, so the durability level runs (restart tests are not skipped).
+  expect(report.durability).toBe('durable');
+  expect(report.restartSupported).toBe(true);
+  expect(report.levelsAchieved).toContain('durability');
+  const durability = report.levels.find((l) => l.level === 'durability');
+  expect(durability?.passed).toBeGreaterThanOrEqual(6);
+  expect(durability?.skipped).toBe(0);
 }
 
 describe('reference host conformance', () => {

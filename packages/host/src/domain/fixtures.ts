@@ -3,8 +3,8 @@
  * clip of 8 notes, an audio track holding an audio clip that references a linked asset, a bus
  * track, and one section — plus matching limits, capabilities and a store-asset lookup.
  */
-import { OPERATION_CAPABILITY, Project } from '@aep/schema';
-import type { Asset, Limits, Project as ProjectT } from '@aep/schema';
+import { OPERATION_CAPABILITY, Project } from '@wty.dev/aep-schema';
+import type { Asset, Limits, Project as ProjectT } from '@wty.dev/aep-schema';
 import type { ApplyContext } from './apply.js';
 
 export const DEMO_LIMITS: Limits = {

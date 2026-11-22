@@ -1,6 +1,7 @@
 {
-  "name": "@aep/core",
-  "version": "0.1.0",
+  "name": "@wty.dev/aep-core",
+  "version": "1.0.0",
+  "description": "Domain-independent coordination utilities for AEP hosts, clients and transports",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,10 +23,27 @@
     "url": "https://github.com/wtydev/aep",
     "directory": "packages/core"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": [
+    "aep",
+    "audio",
+    "protocol",
+    "core"
+  ],
+  "homepage": "https://github.com/wtydev/aep#readme",
+  "bugs": {
+    "url": "https://github.com/wtydev/aep/issues"
+  },
   "scripts": {
     "build": "tsc -b"
   },
   "dependencies": {
-    "@aep/schema": "workspace:*"
+    "@wty.dev/aep-schema": "workspace:*"
   }
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { CoreRequest } from '@aep/schema';
+import type { CoreRequest } from '@wty.dev/aep-schema';
 import { canonicalJson, requestFingerprint, sha256Hex } from './canonical.js';
 
 const request = (overrides: Partial<CoreRequest> = {}): CoreRequest => ({
-  protocol: 'mep/core/1',
+  protocol: 'aep/1',
   session: 'sess1',
   workspace: 'ws1',
   id: 'req1',
