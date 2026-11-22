@@ -1,0 +1,2790 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "project.update"
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "metadata": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            "sampleRate": {
+              "type": "integer",
+              "minimum": 8000,
+              "maximum": 768000
+            },
+            "extensions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "op",
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "track.add"
+        },
+        "track": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "audio",
+                "instrument",
+                "midi",
+                "bus",
+                "hybrid"
+              ]
+            },
+            "parentId": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "mute": {
+              "default": false,
+              "type": "boolean"
+            },
+            "solo": {
+              "default": false,
+              "type": "boolean"
+            },
+            "gainDb": {
+              "default": 0,
+              "type": "number",
+              "minimum": -144,
+              "maximum": 24
+            },
+            "pan": {
+              "default": 0,
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "channels": {
+              "default": 2,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "output": {
+              "default": "master",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "master"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                }
+              ]
+            },
+            "sends": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "targetTrackId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                  },
+                  "gainDb": {
+                    "default": 0,
+                    "type": "number",
+                    "minimum": -144,
+                    "maximum": 24
+                  },
+                  "preFader": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "targetTrackId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "instrument": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "bypass": {
+                      "default": false,
+                      "type": "boolean"
+                    },
+                    "parameters": {
+                      "default": {},
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "maxLength": 1024
+                          },
+                          {
+                            "type": "boolean"
+                          }
+                        ]
+                      }
+                    },
+                    "assetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    "extensions": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "effects": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                  },
+                  "type": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "bypass": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "parameters": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "maxLength": 1024
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    }
+                  },
+                  "assetId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                  },
+                  "extensions": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "id",
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "clips": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "start": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "duration": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "timebase": {
+                        "type": "string",
+                        "enum": [
+                          "beats",
+                          "seconds"
+                        ]
+                      },
+                      "muted": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "gainDb": {
+                        "default": 0,
+                        "type": "number",
+                        "minimum": -144,
+                        "maximum": 24
+                      },
+                      "fadeIn": {
+                        "type": "object",
+                        "properties": {
+                          "duration": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "curve": {
+                            "default": "linear",
+                            "type": "string",
+                            "enum": [
+                              "linear",
+                              "equal-power",
+                              "exponential"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "duration"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "fadeOut": {
+                        "type": "object",
+                        "properties": {
+                          "duration": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "curve": {
+                            "default": "linear",
+                            "type": "string",
+                            "enum": [
+                              "linear",
+                              "equal-power",
+                              "exponential"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "duration"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "extensions": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                        },
+                        "additionalProperties": {}
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "audio"
+                      },
+                      "assetId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                      },
+                      "sourceOffset": {
+                        "default": 0,
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "playbackRate": {
+                        "default": 1,
+                        "type": "number",
+                        "minimum": 0.01,
+                        "maximum": 100
+                      },
+                      "loop": {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "length": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "enabled",
+                          "length"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "start",
+                      "duration",
+                      "timebase",
+                      "type",
+                      "assetId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "start": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "duration": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "timebase": {
+                        "type": "string",
+                        "enum": [
+                          "beats",
+                          "seconds"
+                        ]
+                      },
+                      "muted": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "gainDb": {
+                        "default": 0,
+                        "type": "number",
+                        "minimum": -144,
+                        "maximum": 24
+                      },
+                      "fadeIn": {
+                        "type": "object",
+                        "properties": {
+                          "duration": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "curve": {
+                            "default": "linear",
+                            "type": "string",
+                            "enum": [
+                              "linear",
+                              "equal-power",
+                              "exponential"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "duration"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "fadeOut": {
+                        "type": "object",
+                        "properties": {
+                          "duration": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "curve": {
+                            "default": "linear",
+                            "type": "string",
+                            "enum": [
+                              "linear",
+                              "equal-power",
+                              "exponential"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "duration"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "extensions": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                        },
+                        "additionalProperties": {}
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "midi"
+                      },
+                      "offset": {
+                        "default": 0,
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "loop": {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "length": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "enabled",
+                          "length"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "notes": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                            },
+                            "pitch": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 127
+                            },
+                            "start": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "duration": {
+                              "type": "number",
+                              "exclusiveMinimum": 0
+                            },
+                            "velocity": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 127
+                            },
+                            "channel": {
+                              "default": 0,
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 15
+                            },
+                            "releaseVelocity": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 127
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "pitch",
+                            "start",
+                            "duration",
+                            "velocity"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "controllers": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "time": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "controller": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 127
+                            },
+                            "value": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 127
+                            },
+                            "channel": {
+                              "default": 0,
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 15
+                            }
+                          },
+                          "required": [
+                            "time",
+                            "controller",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "pitchBends": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "time": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "value": {
+                              "type": "integer",
+                              "minimum": -8192,
+                              "maximum": 8191
+                            },
+                            "channel": {
+                              "default": 0,
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 15
+                            }
+                          },
+                          "required": [
+                            "time",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "start",
+                      "duration",
+                      "timebase",
+                      "type"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "automation": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "track"
+                          },
+                          "parameter": {
+                            "type": "string",
+                            "enum": [
+                              "gainDb",
+                              "pan"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "parameter"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "device"
+                          },
+                          "deviceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                          },
+                          "parameter": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "deviceId",
+                          "parameter"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "timebase": {
+                    "default": "beats",
+                    "type": "string",
+                    "enum": [
+                      "beats",
+                      "seconds"
+                    ]
+                  },
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  },
+                  "points": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "value": {
+                          "type": "number"
+                        },
+                        "curve": {
+                          "default": "linear",
+                          "type": "string",
+                          "enum": [
+                            "step",
+                            "linear",
+                            "exponential"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "time",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "extensions": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "id",
+                  "target"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "extensions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "op",
+        "track"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "track.update"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "audio",
+                "instrument",
+                "midi",
+                "bus",
+                "hybrid"
+              ]
+            },
+            "parentId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "mute": {
+              "type": "boolean"
+            },
+            "solo": {
+              "type": "boolean"
+            },
+            "gainDb": {
+              "type": "number",
+              "minimum": -144,
+              "maximum": 24
+            },
+            "pan": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "channels": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "extensions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "op",
+        "trackId",
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "track.remove"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "trackId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "track.reorder"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "op",
+        "trackId",
+        "index"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "clip.insert"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "clip": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "duration": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "timebase": {
+                  "type": "string",
+                  "enum": [
+                    "beats",
+                    "seconds"
+                  ]
+                },
+                "muted": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "gainDb": {
+                  "default": 0,
+                  "type": "number",
+                  "minimum": -144,
+                  "maximum": 24
+                },
+                "fadeIn": {
+                  "type": "object",
+                  "properties": {
+                    "duration": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "curve": {
+                      "default": "linear",
+                      "type": "string",
+                      "enum": [
+                        "linear",
+                        "equal-power",
+                        "exponential"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "duration"
+                  ],
+                  "additionalProperties": false
+                },
+                "fadeOut": {
+                  "type": "object",
+                  "properties": {
+                    "duration": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "curve": {
+                      "default": "linear",
+                      "type": "string",
+                      "enum": [
+                        "linear",
+                        "equal-power",
+                        "exponential"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "duration"
+                  ],
+                  "additionalProperties": false
+                },
+                "extensions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                  },
+                  "additionalProperties": {}
+                },
+                "type": {
+                  "type": "string",
+                  "const": "audio"
+                },
+                "assetId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "sourceOffset": {
+                  "default": 0,
+                  "type": "number",
+                  "minimum": 0
+                },
+                "playbackRate": {
+                  "default": 1,
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 100
+                },
+                "loop": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "length": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "length"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "id",
+                "start",
+                "duration",
+                "timebase",
+                "type",
+                "assetId"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "start": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "duration": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "timebase": {
+                  "type": "string",
+                  "enum": [
+                    "beats",
+                    "seconds"
+                  ]
+                },
+                "muted": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "gainDb": {
+                  "default": 0,
+                  "type": "number",
+                  "minimum": -144,
+                  "maximum": 24
+                },
+                "fadeIn": {
+                  "type": "object",
+                  "properties": {
+                    "duration": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "curve": {
+                      "default": "linear",
+                      "type": "string",
+                      "enum": [
+                        "linear",
+                        "equal-power",
+                        "exponential"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "duration"
+                  ],
+                  "additionalProperties": false
+                },
+                "fadeOut": {
+                  "type": "object",
+                  "properties": {
+                    "duration": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "curve": {
+                      "default": "linear",
+                      "type": "string",
+                      "enum": [
+                        "linear",
+                        "equal-power",
+                        "exponential"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "duration"
+                  ],
+                  "additionalProperties": false
+                },
+                "extensions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                  },
+                  "additionalProperties": {}
+                },
+                "type": {
+                  "type": "string",
+                  "const": "midi"
+                },
+                "offset": {
+                  "default": 0,
+                  "type": "number",
+                  "minimum": 0
+                },
+                "loop": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "length": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "length"
+                  ],
+                  "additionalProperties": false
+                },
+                "notes": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                      },
+                      "pitch": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 127
+                      },
+                      "start": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "duration": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "velocity": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 127
+                      },
+                      "channel": {
+                        "default": 0,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 15
+                      },
+                      "releaseVelocity": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 127
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "pitch",
+                      "start",
+                      "duration",
+                      "velocity"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "controllers": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "time": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "controller": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 127
+                      },
+                      "value": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 127
+                      },
+                      "channel": {
+                        "default": 0,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 15
+                      }
+                    },
+                    "required": [
+                      "time",
+                      "controller",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "pitchBends": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "time": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "value": {
+                        "type": "integer",
+                        "minimum": -8192,
+                        "maximum": 8191
+                      },
+                      "channel": {
+                        "default": 0,
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 15
+                      }
+                    },
+                    "required": [
+                      "time",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "start",
+                "duration",
+                "timebase",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "op",
+        "trackId",
+        "clip"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "clip.update"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "duration": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "muted": {
+              "type": "boolean"
+            },
+            "gainDb": {
+              "type": "number",
+              "minimum": -144,
+              "maximum": 24
+            },
+            "fadeIn": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "duration": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "curve": {
+                      "default": "linear",
+                      "type": "string",
+                      "enum": [
+                        "linear",
+                        "equal-power",
+                        "exponential"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "duration"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fadeOut": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "duration": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "curve": {
+                      "default": "linear",
+                      "type": "string",
+                      "enum": [
+                        "linear",
+                        "equal-power",
+                        "exponential"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "duration"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sourceOffset": {
+              "type": "number",
+              "minimum": 0
+            },
+            "playbackRate": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 100
+            },
+            "offset": {
+              "type": "number",
+              "minimum": 0
+            },
+            "loop": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "length": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "length"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "extensions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "op",
+        "clipId",
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "clip.remove"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "clipId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "clip.move"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "clipId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "clip.trim"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "edge": {
+          "type": "string",
+          "enum": [
+            "start",
+            "end"
+          ]
+        },
+        "to": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "clipId",
+        "edge",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "clip.split"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "at": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "newClipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "clipId",
+        "at",
+        "newClipId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "clip.duplicate"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "newClipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "noteIdPrefix": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "clipId",
+        "newClipId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "midi.notes.add"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "notes": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              },
+              "pitch": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 127
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "duration": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "velocity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 127
+              },
+              "channel": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 15
+              },
+              "releaseVelocity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 127
+              }
+            },
+            "required": [
+              "id",
+              "pitch",
+              "start",
+              "duration",
+              "velocity"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "op",
+        "clipId",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "midi.notes.update"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "updates": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "noteId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              },
+              "patch": {
+                "type": "object",
+                "properties": {
+                  "pitch": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 127
+                  },
+                  "start": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "duration": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "velocity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 127
+                  },
+                  "channel": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15
+                  },
+                  "releaseVelocity": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 127
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "noteId",
+              "patch"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "op",
+        "clipId",
+        "updates"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "midi.notes.remove"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "noteIds": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        }
+      },
+      "required": [
+        "op",
+        "clipId",
+        "noteIds"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "midi.events.update"
+        },
+        "clipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "controllers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": "number",
+                "minimum": 0
+              },
+              "controller": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 127
+              },
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 127
+              },
+              "channel": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 15
+              }
+            },
+            "required": [
+              "time",
+              "controller",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "pitchBends": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": "number",
+                "minimum": 0
+              },
+              "value": {
+                "type": "integer",
+                "minimum": -8192,
+                "maximum": 8191
+              },
+              "channel": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 15
+              }
+            },
+            "required": [
+              "time",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "op",
+        "clipId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "tempo.update"
+        },
+        "tempo": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "beat": {
+                "type": "number",
+                "minimum": 0
+              },
+              "bpm": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 999
+              }
+            },
+            "required": [
+              "beat",
+              "bpm"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "op",
+        "tempo"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "meter.update"
+        },
+        "meter": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "bar": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "numerator": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64
+              },
+              "denominator": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "const": 1
+                  },
+                  {
+                    "type": "number",
+                    "const": 2
+                  },
+                  {
+                    "type": "number",
+                    "const": 4
+                  },
+                  {
+                    "type": "number",
+                    "const": 8
+                  },
+                  {
+                    "type": "number",
+                    "const": 16
+                  },
+                  {
+                    "type": "number",
+                    "const": 32
+                  }
+                ]
+              }
+            },
+            "required": [
+              "bar",
+              "numerator",
+              "denominator"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "op",
+        "meter"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "section.add"
+        },
+        "section": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "start": {
+              "type": "number",
+              "minimum": 0
+            },
+            "duration": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "timebase": {
+              "default": "beats",
+              "type": "string",
+              "enum": [
+                "beats",
+                "seconds"
+              ]
+            },
+            "color": {
+              "type": "string",
+              "maxLength": 32
+            },
+            "extensions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "start",
+            "duration"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "op",
+        "section"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "section.update"
+        },
+        "sectionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "start": {
+              "type": "number",
+              "minimum": 0
+            },
+            "duration": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "color": {
+              "type": "string",
+              "maxLength": 32
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "op",
+        "sectionId",
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "section.remove"
+        },
+        "sectionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "sectionId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "routing.update"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "master"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            }
+          ]
+        },
+        "sends": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "targetTrackId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              },
+              "gainDb": {
+                "default": 0,
+                "type": "number",
+                "minimum": -144,
+                "maximum": 24
+              },
+              "preFader": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "targetTrackId"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "op",
+        "trackId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "instrument.set"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "instrument": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "type": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "bypass": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "parameters": {
+                  "default": {},
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "maxLength": 1024
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                },
+                "assetId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "extensions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "op",
+        "trackId",
+        "instrument"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "effect.insert"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "effect": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "type": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "bypass": {
+              "default": false,
+              "type": "boolean"
+            },
+            "parameters": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "maxLength": 1024
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            "assetId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "extensions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "id",
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "op",
+        "trackId",
+        "effect"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "effect.update"
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "bypass": {
+              "type": "boolean"
+            },
+            "parameters": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "maxLength": 1024
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "extensions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "op",
+        "deviceId",
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "effect.remove"
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "deviceId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "automation.lane.add"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "lane": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "track"
+                    },
+                    "parameter": {
+                      "type": "string",
+                      "enum": [
+                        "gainDb",
+                        "pan"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "parameter"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "device"
+                    },
+                    "deviceId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    },
+                    "parameter": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "deviceId",
+                    "parameter"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "timebase": {
+              "default": "beats",
+              "type": "string",
+              "enum": [
+                "beats",
+                "seconds"
+              ]
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "points": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "time": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "curve": {
+                    "default": "linear",
+                    "type": "string",
+                    "enum": [
+                      "step",
+                      "linear",
+                      "exponential"
+                    ]
+                  }
+                },
+                "required": [
+                  "time",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "extensions": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "id",
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "op",
+        "trackId",
+        "lane"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "automation.points.update"
+        },
+        "laneId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "range": {
+          "type": "object",
+          "properties": {
+            "start": {
+              "type": "number",
+              "minimum": 0
+            },
+            "end": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ],
+          "additionalProperties": false
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": "number",
+                "minimum": 0
+              },
+              "value": {
+                "type": "number"
+              },
+              "curve": {
+                "default": "linear",
+                "type": "string",
+                "enum": [
+                  "step",
+                  "linear",
+                  "exponential"
+                ]
+              }
+            },
+            "required": [
+              "time",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "op",
+        "laneId",
+        "points"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "automation.lane.remove"
+        },
+        "laneId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "laneId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "asset.link"
+        },
+        "assetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "assetId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "asset.unlink"
+        },
+        "assetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "required": [
+        "op",
+        "assetId"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/operation.schema.json"
+}

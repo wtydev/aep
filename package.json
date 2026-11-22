@@ -1,0 +1,34 @@
+{
+  "name": "aep",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AEP — Audio Edit Protocol: specification, schemas, and TypeScript reference SDK",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@11.23.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "schemas": "node scripts/generate-schemas.mjs",
+    "schemas:check": "node scripts/generate-schemas.mjs --check",
+    "conformance": "pnpm build && node packages/testing/dist/cli.js -- node examples/minimal-host/dist/main.js",
+    "demo": "pnpm build && node examples/minimal-client/dist/main.js",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.39.0",
+    "prettier": "^3.10.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^4.0.0"
+  }
+}

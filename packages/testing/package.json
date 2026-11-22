@@ -1,0 +1,38 @@
+{
+  "name": "@aep/testing",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wtydev/aep",
+    "directory": "packages/testing"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@aep/schema": "workspace:*",
+    "@aep/core": "workspace:*",
+    "@aep/client": "workspace:*",
+    "@aep/transport": "workspace:*",
+    "@aep/host": "workspace:*"
+  },
+  "bin": {
+    "aep-conformance": "./dist/cli.js"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "const": "mep/core/1"
+    },
+    "session": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,100}$"
+    },
+    "workspace": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,100}$"
+    },
+    "expiresAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          },
+          "paramsSchema": {
+            "type": "string",
+            "pattern": "^schemas\\/[A-Za-z0-9_-]+\\.schema\\.json$"
+          },
+          "resultSchema": {
+            "type": "string",
+            "pattern": "^schemas\\/[A-Za-z0-9_-]+\\.schema\\.json$"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "effect",
+          "paramsSchema",
+          "resultSchema"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "stateSchema": {
+      "type": "string",
+      "pattern": "^schemas\\/[A-Za-z0-9_-]+\\.schema\\.json$"
+    }
+  },
+  "required": [
+    "protocol",
+    "session",
+    "workspace",
+    "expiresAt",
+    "actions",
+    "stateSchema"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/core-manifest.schema.json"
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "projectId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "sampleRate": {
+      "type": "number"
+    },
+    "trackCount": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "clipCount": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "noteCount": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "assetCount": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "durationSeconds": {
+      "type": "number"
+    },
+    "durationBeats": {
+      "type": "number"
+    },
+    "tempo": {
+      "type": "array",
+      "items": {}
+    },
+    "meter": {
+      "type": "array",
+      "items": {}
+    }
+  },
+  "required": [
+    "projectId",
+    "name",
+    "revision",
+    "trackCount",
+    "clipCount",
+    "noteCount",
+    "assetCount",
+    "durationSeconds",
+    "durationBeats",
+    "tempo",
+    "meter"
+  ],
+  "additionalProperties": false,
+  "$id": "https://github.com/wtydev/aep/schemas/0.1.0/project-describe-result.schema.json"
+}
